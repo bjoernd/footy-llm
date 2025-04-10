@@ -4,6 +4,7 @@ This module provides a customized logging system with console output,
 file rotation, and custom log levels for match events.
 """
 
+import json
 import logging
 import os
 import sys
@@ -28,6 +29,50 @@ logging.addLevelName(SUBSTITUTION, "SUBSTITUTION")
 logging.addLevelName(MATCH_EVENT, "MATCH_EVENT")
 
 
+class JsonFormatter(logging.Formatter):
+    """JSON formatter for structured logging."""
+    
+    def __init__(self, fmt_dict=None):
+        """Initialize the JSON formatter.
+        
+        Args:
+            fmt_dict: Dictionary of format strings.
+        """
+        super().__init__()
+        self.fmt_dict = fmt_dict if fmt_dict else {}
+        
+    def format(self, record):
+        """Format the log record as JSON.
+        
+        Args:
+            record: Log record to format.
+            
+        Returns:
+            JSON string representation of the log record.
+        """
+        record_dict = {}
+        
+        # Add basic record attributes
+        record_dict["timestamp"] = self.formatTime(record)
+        record_dict["name"] = record.name
+        record_dict["level"] = record.levelname
+        record_dict["message"] = record.getMessage()
+        record_dict["module"] = record.module
+        record_dict["function"] = record.funcName
+        record_dict["line"] = record.lineno
+        
+        # Add exception info if available
+        if record.exc_info:
+            record_dict["exception"] = self.formatException(record.exc_info)
+            
+        # Add extra fields from record
+        if hasattr(record, "extra") and record.extra:
+            for key, value in record.extra.items():
+                record_dict[key] = value
+                
+        return json.dumps(record_dict)
+
+
 class FootballLogger:
     """Custom logger for Football Match Notification Service.
 
@@ -37,17 +82,6 @@ class FootballLogger:
 
     # Default log format
     DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    
-    # Default structured log format for JSON logging
-    DEFAULT_STRUCTURED_FORMAT = {
-        "timestamp": "%(asctime)s",
-        "name": "%(name)s",
-        "level": "%(levelname)s",
-        "message": "%(message)s",
-        "module": "%(module)s",
-        "function": "%(funcName)s",
-        "line": "%(lineno)d",
-    }
 
     def __init__(
         self,
@@ -90,7 +124,7 @@ class FootballLogger:
         console_handler = logging.StreamHandler(sys.stdout)
         
         if self.structured_logging:
-            formatter = self._get_structured_formatter()
+            formatter = JsonFormatter()
         else:
             formatter = logging.Formatter(self.log_format)
             
@@ -117,45 +151,12 @@ class FootballLogger:
         )
         
         if self.structured_logging:
-            formatter = self._get_structured_formatter()
+            formatter = JsonFormatter()
         else:
             formatter = logging.Formatter(self.log_format)
             
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
-        
-    def _get_structured_formatter(self) -> logging.Formatter:
-        """Get a JSON formatter for structured logging."""
-        try:
-            import json
-            
-            class JsonFormatter(logging.Formatter):
-                def __init__(self, fmt_dict=None):
-                    self.fmt_dict = fmt_dict if fmt_dict else self.DEFAULT_STRUCTURED_FORMAT
-                    
-                def format(self, record):
-                    record_dict = self.fmt_dict.copy()
-                    for key, value in record_dict.items():
-                        try:
-                            record_dict[key] = value % record.__dict__
-                        except (KeyError, TypeError):
-                            record_dict[key] = value
-                            
-                    # Add exception info if available
-                    if record.exc_info:
-                        record_dict["exception"] = self.formatException(record.exc_info)
-                        
-                    # Add extra fields from record
-                    if hasattr(record, "extra"):
-                        for key, value in record.extra.items():
-                            record_dict[key] = value
-                            
-                    return json.dumps(record_dict)
-                    
-            return JsonFormatter(self.DEFAULT_STRUCTURED_FORMAT)
-        except ImportError:
-            # Fall back to standard formatter if json module is not available
-            return logging.Formatter(self.log_format)
 
     def debug(self, message: str, extra: Optional[Dict] = None) -> None:
         """Log a debug message.
