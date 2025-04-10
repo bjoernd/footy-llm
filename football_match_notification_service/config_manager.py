@@ -108,3 +108,93 @@ class ConfigManager:
                         errors.append(f"Section '{section}' missing required field: {field}")
 
         return errors
+    
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get a configuration value by key.
+
+        Args:
+            key: The configuration key to retrieve. Can use dot notation for nested keys.
+            default: The default value to return if the key is not found.
+
+        Returns:
+            The configuration value or the default if not found.
+        """
+        if not key:
+            return default
+
+        # Handle nested keys with dot notation
+        keys = key.split(".")
+        value = self.config
+        
+        for k in keys:
+            if not isinstance(value, dict) or k not in value:
+                return default
+            value = value[k]
+            
+        return value
+    
+    def get_with_default(self, key: str) -> Any:
+        """Get a configuration value with fallback to DEFAULT_CONFIG.
+
+        Args:
+            key: The configuration key to retrieve. Can use dot notation for nested keys.
+
+        Returns:
+            The configuration value, the default from DEFAULT_CONFIG, or None if not found.
+        """
+        # First try to get from user config
+        value = self.get(key)
+        if value is not None:
+            return value
+            
+        # If not found, try to get from DEFAULT_CONFIG
+        keys = key.split(".")
+        default_value = self.DEFAULT_CONFIG
+        
+        for k in keys:
+            if not isinstance(default_value, dict) or k not in default_value:
+                return None
+            default_value = default_value[k]
+            
+        return default_value
+    
+    def reload(self) -> bool:
+        """Reload configuration from the file.
+
+        Returns:
+            True if configuration was successfully reloaded, False otherwise.
+        """
+        old_config = self.config.copy()
+        self.load_config()
+        
+        # Check if config was actually loaded
+        if not self.config and old_config:
+            # Restore old config if new one is empty
+            self.config = old_config
+            return False
+            
+        return True
+    
+    def ensure_valid_config(self) -> None:
+        """Ensure the configuration is valid.
+
+        Raises:
+            ConfigValidationError: If the configuration is invalid.
+        """
+        errors = self.validate_config()
+        if errors:
+            error_message = "\n".join(errors)
+            raise ConfigValidationError(f"Invalid configuration:\n{error_message}")
+            
+        # Apply default values for missing optional fields
+        self._apply_defaults()
+    
+    def _apply_defaults(self) -> None:
+        """Apply default values for missing optional configuration fields."""
+        for section, defaults in self.DEFAULT_CONFIG.items():
+            if section not in self.config:
+                self.config[section] = {}
+                
+            for key, value in defaults.items():
+                if key not in self.config[section]:
+                    self.config[section][key] = value
