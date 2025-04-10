@@ -21,12 +21,12 @@
 - [x] Write tests for config manager (2025-04-10 21:05:30)
 
 ### Logging System
-- [ ] Create logger.py module
-- [ ] Set up basic logging with console output
-- [ ] Implement log file rotation
-- [ ] Add custom log levels for match events
-- [ ] Implement structured logging
-- [ ] Write tests for logging functionality
+- [x] Create logger.py module (2025-04-10 21:15:30)
+- [x] Set up basic logging with console output (2025-04-10 21:15:30)
+- [x] Implement log file rotation (2025-04-10 21:15:30)
+- [x] Add custom log levels for match events (2025-04-10 21:15:30)
+- [x] Implement structured logging (2025-04-10 21:15:30)
+- [x] Write tests for logging functionality (2025-04-10 21:15:30)
 
 ## Phase 2: API Integration
 
