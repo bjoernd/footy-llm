@@ -1,0 +1,46 @@
+{
+  "teams": [
+    {
+      "name": "Arsenal FC",
+      "short_name": "Arsenal",
+      "league": "Premier League",
+      "team_id": "57",
+      "country": "England"
+    },
+    {
+      "name": "FC Barcelona",
+      "short_name": "Barcelona",
+      "league": "La Liga",
+      "team_id": "81",
+      "country": "Spain"
+    }
+  ],
+  "api_settings": {
+    "api_key": "YOUR_API_KEY_HERE",
+    "base_url": "https://api.football-data.org/v4",
+    "request_timeout": 30
+  },
+  "notification_preferences": {
+    "channels": ["email", "signal"],
+    "priority_order": ["signal", "email"],
+    "email": {
+      "recipients": ["your.email@example.com"],
+      "sender": "football-notifications@example.com",
+      "smtp_server": "smtp.example.com",
+      "smtp_port": 587,
+      "smtp_username": "your_username",
+      "smtp_password": "your_password",
+      "use_tls": true
+    },
+    "signal": {
+      "recipients": ["+1234567890"],
+      "sender": "+0987654321"
+    }
+  },
+  "polling_settings": {
+    "frequency_normal": 300,
+    "frequency_during_match": 60,
+    "match_discovery_days": 3,
+    "match_history_days": 7
+  }
+}
