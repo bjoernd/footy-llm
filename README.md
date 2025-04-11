@@ -24,4 +24,4 @@ Coming soon...
 
 ## License
 
-MIT
+BSD 3-Clause "New" or "Revised" License
