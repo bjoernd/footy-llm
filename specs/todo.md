@@ -45,13 +45,13 @@
 - [x] Write tests for retry functionality (2025-04-11 16:25:30)
 
 ### Data Models and Parsing
-- [ ] Create Team model
-- [ ] Create Match model
-- [ ] Create Event model
-- [ ] Implement data validation
-- [ ] Add API response parsing
-- [ ] Implement data normalization utilities
-- [ ] Write tests for models and parsing
+- [x] Create Team model (2025-04-11 17:36:47)
+- [x] Create Match model (2025-04-11 17:36:47)
+- [x] Create Event model (2025-04-11 17:36:47)
+- [x] Implement data validation (2025-04-11 17:36:47)
+- [x] Add API response parsing (2025-04-11 17:36:47)
+- [x] Implement data normalization utilities (2025-04-11 17:36:47)
+- [x] Write tests for models and parsing (2025-04-11 17:36:47)
 
 ## Phase 3: Scheduling and Event Detection
 
