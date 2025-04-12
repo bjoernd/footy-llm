@@ -11,6 +11,9 @@ import sys
 from logging.handlers import RotatingFileHandler
 from typing import Dict, Optional, Union
 
+# Global logger instance cache
+_loggers = {}
+
 
 # Custom log levels for match events
 MATCH_START = 25
@@ -257,3 +260,17 @@ class FootballLogger:
             extra: Extra fields to include in the log record.
         """
         self.logger.log(MATCH_EVENT, message, extra={"extra": extra} if extra else None)
+
+
+def get_logger(name: str) -> FootballLogger:
+    """Get a logger instance.
+    
+    Args:
+        name: Logger name.
+        
+    Returns:
+        FootballLogger: Logger instance.
+    """
+    if name not in _loggers:
+        _loggers[name] = FootballLogger(name=name)
+    return _loggers[name]

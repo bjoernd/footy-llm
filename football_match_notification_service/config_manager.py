@@ -198,3 +198,25 @@ class ConfigManager:
             for key, value in defaults.items():
                 if key not in self.config[section]:
                     self.config[section][key] = value
+
+
+# Singleton instance
+_config_manager_instance: Optional[ConfigManager] = None
+
+
+def get_config_manager(config_file: Optional[str] = None) -> ConfigManager:
+    """
+    Get the singleton config manager instance.
+    
+    Args:
+        config_file: Path to configuration file
+        
+    Returns:
+        The config manager instance
+    """
+    global _config_manager_instance
+    
+    if _config_manager_instance is None:
+        _config_manager_instance = ConfigManager(config_file)
+        
+    return _config_manager_instance
