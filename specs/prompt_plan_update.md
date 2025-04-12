@@ -20,3 +20,9 @@ After completing each commit, update the implementation checklist in specs/todo.
 ```
 
 This change should be applied to all prompts in the prompt_plan.md file to ensure consistent tracking of task completion times.
+
+# Additional testing
+
+Before any git commit that you create, run a build with `hatch build` and a test with `hatch run test`. Only proceed if the tests succeed 100%.
+
+Format the code using the black code formatter before submitting a commit.
