@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Union
 
 class MatchStatus(Enum):
     """Enum for match status."""
+
     SCHEDULED = "SCHEDULED"
     TIMED = "TIMED"
     IN_PLAY = "IN_PLAY"
@@ -26,6 +27,7 @@ class MatchStatus(Enum):
 
 class EventType(Enum):
     """Enum for event types."""
+
     GOAL = "GOAL"
     YELLOW_CARD = "YELLOW_CARD"
     RED_CARD = "RED_CARD"
@@ -43,12 +45,13 @@ class EventType(Enum):
 @dataclass
 class Team:
     """Team data model."""
+
     id: str
     name: str
     short_name: Optional[str] = None
     logo_url: Optional[str] = None
     country: Optional[str] = None
-    
+
     def __post_init__(self):
         """Validate and normalize team data."""
         if not self.id:
@@ -62,9 +65,10 @@ class Team:
 @dataclass
 class Score:
     """Score data model."""
+
     home: Optional[int] = 0
     away: Optional[int] = 0
-    
+
     def __str__(self) -> str:
         """String representation of score."""
         home_score = self.home if self.home is not None else "-"
@@ -75,6 +79,7 @@ class Score:
 @dataclass
 class Event:
     """Event data model."""
+
     id: str
     match_id: str
     type: EventType
@@ -83,7 +88,7 @@ class Event:
     player_name: Optional[str] = None
     description: Optional[str] = None
     timestamp: datetime.datetime = field(default_factory=datetime.datetime.now)
-    
+
     def __post_init__(self):
         """Validate and normalize event data."""
         if not self.id:
@@ -100,13 +105,13 @@ class Event:
                 raise ValueError("Type must be an EventType enum")
         if not isinstance(self.timestamp, datetime.datetime):
             raise ValueError("Timestamp must be a datetime object")
-    
+
     def __str__(self) -> str:
         """String representation of event."""
         if self.minute is not None:
             return f"{self.minute}' - {self.type.value}: {self.description or ''}"
         return f"{self.type.value}: {self.description or ''}"
-        
+
     def to_dict(self) -> Dict:
         """Convert the Event object to a dictionary."""
         return {
@@ -119,12 +124,16 @@ class Event:
             "description": self.description,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict) -> "Event":
         """Create an Event object from a dictionary."""
-        timestamp = datetime.datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else None
-        
+        timestamp = (
+            datetime.datetime.fromisoformat(data["timestamp"])
+            if data.get("timestamp")
+            else None
+        )
+
         return cls(
             id=data["id"],
             match_id=data["match_id"],
@@ -140,6 +149,7 @@ class Event:
 @dataclass
 class Match:
     """Match data model."""
+
     id: str
     home_team: Team
     away_team: Team
@@ -150,7 +160,7 @@ class Match:
     matchday: Optional[int] = None
     last_updated: Optional[datetime.datetime] = None
     events: List[Event] = field(default_factory=list)
-    
+
     def __post_init__(self):
         """Validate and normalize match data."""
         if not self.id:
@@ -171,27 +181,31 @@ class Match:
                 raise ValueError("Status must be a MatchStatus enum")
         if not isinstance(self.score, Score):
             raise ValueError("Score must be a Score object")
-        
+
     def is_live(self) -> bool:
         """Check if match is currently live."""
         return self.status in [MatchStatus.IN_PLAY, MatchStatus.PAUSED]
-    
+
     def is_finished(self) -> bool:
         """Check if match is finished."""
         return self.status == MatchStatus.FINISHED
-    
+
     def is_scheduled(self) -> bool:
         """Check if match is scheduled."""
         return self.status in [MatchStatus.SCHEDULED, MatchStatus.TIMED]
-    
+
     def is_postponed(self) -> bool:
         """Check if match is postponed."""
-        return self.status in [MatchStatus.POSTPONED, MatchStatus.CANCELLED, MatchStatus.SUSPENDED]
-    
+        return self.status in [
+            MatchStatus.POSTPONED,
+            MatchStatus.CANCELLED,
+            MatchStatus.SUSPENDED,
+        ]
+
     def __str__(self) -> str:
         """String representation of match."""
         return f"{self.home_team.name} {self.score} {self.away_team.name} ({self.status.value})"
-    
+
     def to_dict(self) -> Dict:
         """Convert the Match object to a dictionary."""
         return {
@@ -218,10 +232,12 @@ class Match:
             },
             "competition": self.competition,
             "matchday": self.matchday,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "last_updated": (
+                self.last_updated.isoformat() if self.last_updated else None
+            ),
             "events": [event.to_dict() for event in self.events] if self.events else [],
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict) -> "Match":
         """Create a Match object from a dictionary."""
@@ -239,20 +255,28 @@ class Match:
             logo_url=data["away_team"].get("logo_url"),
             country=data["away_team"].get("country"),
         )
-        
-        start_time = datetime.datetime.fromisoformat(data["start_time"]) if data.get("start_time") else None
-        last_updated = datetime.datetime.fromisoformat(data["last_updated"]) if data.get("last_updated") else None
-        
+
+        start_time = (
+            datetime.datetime.fromisoformat(data["start_time"])
+            if data.get("start_time")
+            else None
+        )
+        last_updated = (
+            datetime.datetime.fromisoformat(data["last_updated"])
+            if data.get("last_updated")
+            else None
+        )
+
         score = Score(
             home=data["score"].get("home"),
             away=data["score"].get("away"),
         )
-        
+
         events = []
         if data.get("events"):
             for event_data in data["events"]:
                 events.append(Event.from_dict(event_data))
-        
+
         return cls(
             id=data["id"],
             home_team=home_team,

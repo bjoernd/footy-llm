@@ -9,7 +9,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from football_match_notification_service.api_client import APIClientError, RateLimitError
+from football_match_notification_service.api_client import (
+    APIClientError,
+    RateLimitError,
+)
 from football_match_notification_service.retry import (
     CircuitBreaker,
     CircuitBreakerError,
@@ -129,13 +132,17 @@ class TestRetryDecorator(unittest.TestCase):
 
     def test_retry_with_backoff(self):
         """Test retry with backoff."""
-        mock_func = MagicMock(side_effect=[APIClientError("error"), APIClientError("error"), "success"])
-        decorated_func = retry(initial_delay=0.01, backoff_factor=2, jitter=False)(mock_func)
-        
+        mock_func = MagicMock(
+            side_effect=[APIClientError("error"), APIClientError("error"), "success"]
+        )
+        decorated_func = retry(initial_delay=0.01, backoff_factor=2, jitter=False)(
+            mock_func
+        )
+
         start_time = time.time()
         result = decorated_func("test_endpoint")
         elapsed_time = time.time() - start_time
-        
+
         assert result == "success"
         assert mock_func.call_count == 3
         # First retry: 0.01s, Second retry: 0.02s
@@ -145,12 +152,15 @@ class TestRetryDecorator(unittest.TestCase):
         """Test integration with circuit breaker."""
         # Reset circuit breakers
         from football_match_notification_service.retry import _circuit_breakers
+
         _circuit_breakers.clear()
-        
+
         # Create a function that fails enough to open the circuit
         mock_func = MagicMock(side_effect=APIClientError("error"))
-        decorated_func = retry(circuit_breaker=True, max_retries=1, initial_delay=0.01)(mock_func)
-        
+        decorated_func = retry(circuit_breaker=True, max_retries=1, initial_delay=0.01)(
+            mock_func
+        )
+
         # Call until circuit breaker opens (3 failures)
         with pytest.raises(APIClientError):
             decorated_func("test_endpoint")
@@ -158,11 +168,11 @@ class TestRetryDecorator(unittest.TestCase):
             decorated_func("test_endpoint")
         with pytest.raises(APIClientError):
             decorated_func("test_endpoint")
-            
+
         # Next call should raise CircuitBreakerError
         with pytest.raises(CircuitBreakerError):
             decorated_func("test_endpoint")
-            
+
         # Function should not have been called again
         assert mock_func.call_count == 6  # 3 calls with 1 retry each
 
@@ -178,11 +188,12 @@ class TestRetryDecorator(unittest.TestCase):
         """Test getting a circuit breaker for an endpoint."""
         # Reset circuit breakers
         from football_match_notification_service.retry import _circuit_breakers
+
         _circuit_breakers.clear()
-        
+
         cb1 = get_circuit_breaker("endpoint1")
         cb2 = get_circuit_breaker("endpoint2")
         cb1_again = get_circuit_breaker("endpoint1")
-        
+
         assert cb1 is not cb2
         assert cb1 is cb1_again

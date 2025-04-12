@@ -71,7 +71,7 @@ class TestAPIClient(unittest.TestCase):
 
         # Create client and attempt request
         client = FootballDataClient(self.config_manager)
-        
+
         # Verify exception is raised
         with pytest.raises(AuthenticationError):
             client._make_request("/test")
@@ -87,7 +87,7 @@ class TestAPIClient(unittest.TestCase):
 
         # Create client and attempt request
         client = FootballDataClient(self.config_manager)
-        
+
         # Verify exception is raised
         with pytest.raises(RateLimitError):
             client._make_request("/test")
@@ -103,7 +103,7 @@ class TestAPIClient(unittest.TestCase):
 
         # Create client and attempt request
         client = FootballDataClient(self.config_manager)
-        
+
         # Verify exception is raised
         with pytest.raises(APIClientError):
             client._make_request("/test")
@@ -120,7 +120,7 @@ class TestAPIClient(unittest.TestCase):
 
         # Create client and attempt request
         client = FootballDataClient(self.config_manager)
-        
+
         # Verify exception is raised
         with pytest.raises(APIClientError):
             client._make_request("/test")
@@ -133,7 +133,7 @@ class TestAPIClient(unittest.TestCase):
 
         # Create client and attempt request
         client = FootballDataClient(self.config_manager)
-        
+
         # Verify exception is raised
         with pytest.raises(APIClientError):
             client._make_request("/test")
@@ -149,7 +149,9 @@ class TestAPIClient(unittest.TestCase):
 
         # Create client and make request
         client = FootballDataClient(self.config_manager)
-        result = client.get_matches(team_id="123", date_from="2025-04-01", date_to="2025-04-10")
+        result = client.get_matches(
+            team_id="123", date_from="2025-04-01", date_to="2025-04-10"
+        )
 
         # Verify request was made correctly
         mock_get.assert_called_once_with(
@@ -190,11 +192,15 @@ class TestAPIClient(unittest.TestCase):
         """Test error handling when API key is missing."""
         # Setup config manager to return None for API key
         config_manager = MagicMock(spec=ConfigManager)
-        config_manager.get.side_effect = lambda key, default=None: None if key == "api.football_data.api_key" else self._mock_config_get(key, default)
+        config_manager.get.side_effect = lambda key, default=None: (
+            None
+            if key == "api.football_data.api_key"
+            else self._mock_config_get(key, default)
+        )
 
         # Create client
         client = FootballDataClient(config_manager)
-        
+
         # Verify exception is raised when trying to get headers
         with pytest.raises(AuthenticationError):
             client._get_headers()

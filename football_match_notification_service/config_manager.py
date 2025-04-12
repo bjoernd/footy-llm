@@ -98,17 +98,21 @@ class ConfigManager:
                             errors.append(f"Team at index {i} must be a dictionary")
                             continue
                         if field not in team:
-                            errors.append(f"Team at index {i} missing required field: {field}")
+                            errors.append(
+                                f"Team at index {i} missing required field: {field}"
+                            )
                 else:
                     # Other sections are dictionaries
                     if not isinstance(self.config[section], dict):
                         errors.append(f"Section '{section}' must be a dictionary")
                         continue
                     if field not in self.config[section]:
-                        errors.append(f"Section '{section}' missing required field: {field}")
+                        errors.append(
+                            f"Section '{section}' missing required field: {field}"
+                        )
 
         return errors
-    
+
     def get(self, key: str, default: Any = None) -> Any:
         """Get a configuration value by key.
 
@@ -125,14 +129,14 @@ class ConfigManager:
         # Handle nested keys with dot notation
         keys = key.split(".")
         value = self.config
-        
+
         for k in keys:
             if not isinstance(value, dict) or k not in value:
                 return default
             value = value[k]
-            
+
         return value
-    
+
     def get_with_default(self, key: str) -> Any:
         """Get a configuration value with fallback to DEFAULT_CONFIG.
 
@@ -146,18 +150,18 @@ class ConfigManager:
         value = self.get(key)
         if value is not None:
             return value
-            
+
         # If not found, try to get from DEFAULT_CONFIG
         keys = key.split(".")
         default_value = self.DEFAULT_CONFIG
-        
+
         for k in keys:
             if not isinstance(default_value, dict) or k not in default_value:
                 return None
             default_value = default_value[k]
-            
+
         return default_value
-    
+
     def reload(self) -> bool:
         """Reload configuration from the file.
 
@@ -166,15 +170,15 @@ class ConfigManager:
         """
         old_config = self.config.copy()
         self.load_config()
-        
+
         # Check if config was actually loaded
         if not self.config and old_config:
             # Restore old config if new one is empty
             self.config = old_config
             return False
-            
+
         return True
-    
+
     def ensure_valid_config(self) -> None:
         """Ensure the configuration is valid.
 
@@ -185,16 +189,16 @@ class ConfigManager:
         if errors:
             error_message = "\n".join(errors)
             raise ConfigValidationError(f"Invalid configuration:\n{error_message}")
-            
+
         # Apply default values for missing optional fields
         self._apply_defaults()
-    
+
     def _apply_defaults(self) -> None:
         """Apply default values for missing optional configuration fields."""
         for section, defaults in self.DEFAULT_CONFIG.items():
             if section not in self.config:
                 self.config[section] = {}
-                
+
             for key, value in defaults.items():
                 if key not in self.config[section]:
                     self.config[section][key] = value
@@ -207,16 +211,16 @@ _config_manager_instance: Optional[ConfigManager] = None
 def get_config_manager(config_file: Optional[str] = None) -> ConfigManager:
     """
     Get the singleton config manager instance.
-    
+
     Args:
         config_file: Path to configuration file
-        
+
     Returns:
         The config manager instance
     """
     global _config_manager_instance
-    
+
     if _config_manager_instance is None:
         _config_manager_instance = ConfigManager(config_file)
-        
+
     return _config_manager_instance

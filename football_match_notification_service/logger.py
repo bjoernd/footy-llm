@@ -34,27 +34,27 @@ logging.addLevelName(MATCH_EVENT, "MATCH_EVENT")
 
 class JsonFormatter(logging.Formatter):
     """JSON formatter for structured logging."""
-    
+
     def __init__(self, fmt_dict=None):
         """Initialize the JSON formatter.
-        
+
         Args:
             fmt_dict: Dictionary of format strings.
         """
         super().__init__()
         self.fmt_dict = fmt_dict if fmt_dict else {}
-        
+
     def format(self, record):
         """Format the log record as JSON.
-        
+
         Args:
             record: Log record to format.
-            
+
         Returns:
             JSON string representation of the log record.
         """
         record_dict = {}
-        
+
         # Add basic record attributes
         record_dict["timestamp"] = self.formatTime(record)
         record_dict["name"] = record.name
@@ -63,16 +63,16 @@ class JsonFormatter(logging.Formatter):
         record_dict["module"] = record.module
         record_dict["function"] = record.funcName
         record_dict["line"] = record.lineno
-        
+
         # Add exception info if available
         if record.exc_info:
             record_dict["exception"] = self.formatException(record.exc_info)
-            
+
         # Add extra fields from record
         if hasattr(record, "extra") and record.extra:
             for key, value in record.extra.items():
                 record_dict[key] = value
-                
+
         return json.dumps(record_dict)
 
 
@@ -125,16 +125,18 @@ class FootballLogger:
     def _add_console_handler(self) -> None:
         """Add a console handler to the logger."""
         console_handler = logging.StreamHandler(sys.stdout)
-        
+
         if self.structured_logging:
             formatter = JsonFormatter()
         else:
             formatter = logging.Formatter(self.log_format)
-            
+
         console_handler.setFormatter(formatter)
         self.logger.addHandler(console_handler)
 
-    def _add_file_handler(self, log_file: str, max_bytes: int = 10485760, backup_count: int = 5) -> None:
+    def _add_file_handler(
+        self, log_file: str, max_bytes: int = 10485760, backup_count: int = 5
+    ) -> None:
         """Add a rotating file handler to the logger.
 
         Args:
@@ -152,12 +154,12 @@ class FootballLogger:
             maxBytes=max_bytes,
             backupCount=backup_count,
         )
-        
+
         if self.structured_logging:
             formatter = JsonFormatter()
         else:
             formatter = logging.Formatter(self.log_format)
-            
+
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
 
@@ -205,7 +207,7 @@ class FootballLogger:
             extra: Extra fields to include in the log record.
         """
         self.logger.critical(message, extra={"extra": extra} if extra else None)
-        
+
     # Custom log level methods for match events
     def match_start(self, message: str, extra: Optional[Dict] = None) -> None:
         """Log a match start event.
@@ -215,7 +217,7 @@ class FootballLogger:
             extra: Extra fields to include in the log record.
         """
         self.logger.log(MATCH_START, message, extra={"extra": extra} if extra else None)
-        
+
     def match_end(self, message: str, extra: Optional[Dict] = None) -> None:
         """Log a match end event.
 
@@ -224,7 +226,7 @@ class FootballLogger:
             extra: Extra fields to include in the log record.
         """
         self.logger.log(MATCH_END, message, extra={"extra": extra} if extra else None)
-        
+
     def goal(self, message: str, extra: Optional[Dict] = None) -> None:
         """Log a goal event.
 
@@ -233,7 +235,7 @@ class FootballLogger:
             extra: Extra fields to include in the log record.
         """
         self.logger.log(GOAL, message, extra={"extra": extra} if extra else None)
-        
+
     def card(self, message: str, extra: Optional[Dict] = None) -> None:
         """Log a card event.
 
@@ -242,7 +244,7 @@ class FootballLogger:
             extra: Extra fields to include in the log record.
         """
         self.logger.log(CARD, message, extra={"extra": extra} if extra else None)
-        
+
     def substitution(self, message: str, extra: Optional[Dict] = None) -> None:
         """Log a substitution event.
 
@@ -250,8 +252,10 @@ class FootballLogger:
             message: The message to log.
             extra: Extra fields to include in the log record.
         """
-        self.logger.log(SUBSTITUTION, message, extra={"extra": extra} if extra else None)
-        
+        self.logger.log(
+            SUBSTITUTION, message, extra={"extra": extra} if extra else None
+        )
+
     def match_event(self, message: str, extra: Optional[Dict] = None) -> None:
         """Log a generic match event.
 
@@ -264,10 +268,10 @@ class FootballLogger:
 
 def get_logger(name: str) -> FootballLogger:
     """Get a logger instance.
-    
+
     Args:
         name: Logger name.
-        
+
     Returns:
         FootballLogger: Logger instance.
     """

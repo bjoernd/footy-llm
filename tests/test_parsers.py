@@ -34,13 +34,13 @@ class TestFootballDataParser(unittest.TestCase):
             "crest": "https://example.com/logo.png",
             "area": {"name": "Test Country"},
         }
-        
+
         # Sample score data
         self.score_data = {
             "fullTime": {"home": 2, "away": 1},
             "halfTime": {"home": 1, "away": 0},
         }
-        
+
         # Sample match data
         self.match_data = {
             "id": 123,
@@ -58,7 +58,7 @@ class TestFootballDataParser(unittest.TestCase):
             "competition": {"name": "Test League"},
             "matchday": 5,
         }
-        
+
         # Sample matches data
         self.matches_data = {
             "matches": [
@@ -248,7 +248,7 @@ class TestFootballDataParser(unittest.TestCase):
         home_team = Team(id="123", name="Home Team")
         away_team = Team(id="456", name="Away Team")
         start_time = datetime.datetime.now()
-        
+
         # Current match is live, no previous match
         current_match = Match(
             id="123",
@@ -257,18 +257,18 @@ class TestFootballDataParser(unittest.TestCase):
             start_time=start_time,
             status=MatchStatus.IN_PLAY,
         )
-        
+
         events = FootballDataParser.extract_events(current_match)
         assert len(events) == 1
         assert events[0].type == EventType.MATCH_START
         assert events[0].match_id == "123"
-        
+
     def test_extract_events_status_change(self):
         """Test extracting events from status change."""
         home_team = Team(id="123", name="Home Team")
         away_team = Team(id="456", name="Away Team")
         start_time = datetime.datetime.now()
-        
+
         # Previous match was scheduled, current match is live
         previous_match = Match(
             id="123",
@@ -277,7 +277,7 @@ class TestFootballDataParser(unittest.TestCase):
             start_time=start_time,
             status=MatchStatus.SCHEDULED,
         )
-        
+
         current_match = Match(
             id="123",
             home_team=home_team,
@@ -285,12 +285,12 @@ class TestFootballDataParser(unittest.TestCase):
             start_time=start_time,
             status=MatchStatus.IN_PLAY,
         )
-        
+
         events = FootballDataParser.extract_events(current_match, previous_match)
         assert len(events) == 1
         assert events[0].type == EventType.MATCH_START
         assert events[0].match_id == "123"
-        
+
         # Previous match was live, current match is finished
         previous_match = Match(
             id="123",
@@ -299,7 +299,7 @@ class TestFootballDataParser(unittest.TestCase):
             start_time=start_time,
             status=MatchStatus.IN_PLAY,
         )
-        
+
         current_match = Match(
             id="123",
             home_team=home_team,
@@ -307,18 +307,18 @@ class TestFootballDataParser(unittest.TestCase):
             start_time=start_time,
             status=MatchStatus.FINISHED,
         )
-        
+
         events = FootballDataParser.extract_events(current_match, previous_match)
         assert len(events) == 1
         assert events[0].type == EventType.MATCH_END
         assert events[0].match_id == "123"
-        
+
     def test_extract_events_goal(self):
         """Test extracting goal events."""
         home_team = Team(id="123", name="Home Team")
         away_team = Team(id="456", name="Away Team")
         start_time = datetime.datetime.now()
-        
+
         # Previous match score: 0-0, current match score: 1-0
         previous_match = Match(
             id="123",
@@ -328,7 +328,7 @@ class TestFootballDataParser(unittest.TestCase):
             status=MatchStatus.IN_PLAY,
             score=Score(home=0, away=0),
         )
-        
+
         current_match = Match(
             id="123",
             home_team=home_team,
@@ -337,13 +337,13 @@ class TestFootballDataParser(unittest.TestCase):
             status=MatchStatus.IN_PLAY,
             score=Score(home=1, away=0),
         )
-        
+
         events = FootballDataParser.extract_events(current_match, previous_match)
         assert len(events) == 1
         assert events[0].type == EventType.GOAL
         assert events[0].match_id == "123"
         assert events[0].team_id == "123"  # Home team scored
-        
+
         # Previous match score: 1-0, current match score: 1-1
         previous_match = Match(
             id="123",
@@ -353,7 +353,7 @@ class TestFootballDataParser(unittest.TestCase):
             status=MatchStatus.IN_PLAY,
             score=Score(home=1, away=0),
         )
-        
+
         current_match = Match(
             id="123",
             home_team=home_team,
@@ -362,19 +362,19 @@ class TestFootballDataParser(unittest.TestCase):
             status=MatchStatus.IN_PLAY,
             score=Score(home=1, away=1),
         )
-        
+
         events = FootballDataParser.extract_events(current_match, previous_match)
         assert len(events) == 1
         assert events[0].type == EventType.GOAL
         assert events[0].match_id == "123"
         assert events[0].team_id == "456"  # Away team scored
-        
+
     def test_extract_events_multiple(self):
         """Test extracting multiple events."""
         home_team = Team(id="123", name="Home Team")
         away_team = Team(id="456", name="Away Team")
         start_time = datetime.datetime.now()
-        
+
         # Previous match: scheduled, score 0-0
         # Current match: in play, score 1-0
         previous_match = Match(
@@ -385,7 +385,7 @@ class TestFootballDataParser(unittest.TestCase):
             status=MatchStatus.SCHEDULED,
             score=Score(home=0, away=0),
         )
-        
+
         current_match = Match(
             id="123",
             home_team=home_team,
@@ -394,7 +394,7 @@ class TestFootballDataParser(unittest.TestCase):
             status=MatchStatus.IN_PLAY,
             score=Score(home=1, away=0),
         )
-        
+
         events = FootballDataParser.extract_events(current_match, previous_match)
         assert len(events) == 2
         assert events[0].type == EventType.MATCH_START

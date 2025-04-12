@@ -11,7 +11,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from football_match_notification_service.match_tracker import MatchTracker, get_match_tracker
+from football_match_notification_service.match_tracker import (
+    MatchTracker,
+    get_match_tracker,
+)
 from football_match_notification_service.models import Match, Team, Score, MatchStatus
 
 
@@ -30,8 +33,18 @@ class TestMatchTracker:
         mock_config = MagicMock()
         mock_config.get.side_effect = lambda key, default=None: {
             "teams": [
-                {"team_id": "1", "name": "Team A", "short_name": "TA", "country": "Country A"},
-                {"team_id": "2", "name": "Team B", "short_name": "TB", "country": "Country B"},
+                {
+                    "team_id": "1",
+                    "name": "Team A",
+                    "short_name": "TA",
+                    "country": "Country A",
+                },
+                {
+                    "team_id": "2",
+                    "name": "Team B",
+                    "short_name": "TB",
+                    "country": "Country B",
+                },
             ],
             "polling.discovery_days": 3,
             "polling.match_retention_days": 7,
@@ -108,7 +121,7 @@ class TestMatchTracker:
 
         # Verify API calls
         assert mock_api_client.get_team_matches.call_count == 2
-        
+
         # Verify discovered matches
         assert len(new_matches) == 2
         assert len(tracker.upcoming_matches) == 2
@@ -207,7 +220,7 @@ class TestMatchTracker:
         # Add matches to collections
         home_team = Team(id="1", name="Team A")
         away_team = Team(id="2", name="Team B")
-        
+
         # Active match
         active_match = Match(
             id="1",
@@ -219,7 +232,7 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.active_matches["1"] = active_match
-        
+
         # Upcoming match starting soon
         upcoming_soon = Match(
             id="2",
@@ -231,7 +244,7 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.upcoming_matches["2"] = upcoming_soon
-        
+
         # Upcoming match not starting soon
         upcoming_later = Match(
             id="3",
@@ -243,7 +256,7 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.upcoming_matches["3"] = upcoming_later
-        
+
         # Recent match
         recent_match = Match(
             id="4",
@@ -255,10 +268,10 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.recent_matches["4"] = recent_match
-        
+
         # Get matches to monitor
         matches_to_monitor = tracker.get_matches_to_monitor()
-        
+
         # Verify results
         assert len(matches_to_monitor) == 2
         match_ids = [m.id for m in matches_to_monitor]
@@ -272,7 +285,7 @@ class TestMatchTracker:
         # Add old and recent matches
         home_team = Team(id="1", name="Team A")
         away_team = Team(id="2", name="Team B")
-        
+
         # Old match (beyond retention period)
         old_match = Match(
             id="1",
@@ -284,7 +297,7 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.recent_matches["1"] = old_match
-        
+
         # Recent match (within retention period)
         recent_match = Match(
             id="2",
@@ -296,10 +309,10 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.recent_matches["2"] = recent_match
-        
+
         # Clean old matches
         removed_count = tracker.clean_old_matches()
-        
+
         # Verify results
         assert removed_count == 1
         assert "1" not in tracker.recent_matches
@@ -310,7 +323,7 @@ class TestMatchTracker:
         # Add matches to collections
         home_team = Team(id="1", name="Team A")
         away_team = Team(id="2", name="Team B")
-        
+
         upcoming_match = Match(
             id="1",
             home_team=home_team,
@@ -321,7 +334,7 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.upcoming_matches["1"] = upcoming_match
-        
+
         active_match = Match(
             id="2",
             home_team=home_team,
@@ -332,7 +345,7 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.active_matches["2"] = active_match
-        
+
         recent_match = Match(
             id="3",
             home_team=home_team,
@@ -343,23 +356,23 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.recent_matches["3"] = recent_match
-        
+
         # Save matches
         tracker._save_matches()
-        
+
         # Verify files were created
         assert os.path.exists(os.path.join(temp_storage_path, "upcoming_matches.json"))
         assert os.path.exists(os.path.join(temp_storage_path, "active_matches.json"))
         assert os.path.exists(os.path.join(temp_storage_path, "recent_matches.json"))
-        
+
         # Clear collections
         tracker.upcoming_matches = {}
         tracker.active_matches = {}
         tracker.recent_matches = {}
-        
+
         # Load matches
         tracker._load_matches()
-        
+
         # Verify matches were loaded
         assert "1" in tracker.upcoming_matches
         assert "2" in tracker.active_matches
@@ -370,7 +383,7 @@ class TestMatchTracker:
         # Add matches to collections
         home_team = Team(id="1", name="Team A")
         away_team = Team(id="2", name="Team B")
-        
+
         upcoming_match = Match(
             id="1",
             home_team=home_team,
@@ -381,7 +394,7 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.upcoming_matches["1"] = upcoming_match
-        
+
         active_match = Match(
             id="2",
             home_team=home_team,
@@ -392,7 +405,7 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.active_matches["2"] = active_match
-        
+
         recent_match = Match(
             id="3",
             home_team=home_team,
@@ -403,13 +416,13 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.recent_matches["3"] = recent_match
-        
+
         # Get matches
         match1 = tracker.get_match("1")
         match2 = tracker.get_match("2")
         match3 = tracker.get_match("3")
         match4 = tracker.get_match("4")
-        
+
         # Verify results
         assert match1 == upcoming_match
         assert match2 == active_match
@@ -421,7 +434,7 @@ class TestMatchTracker:
         # Add matches to collections
         home_team = Team(id="1", name="Team A")
         away_team = Team(id="2", name="Team B")
-        
+
         upcoming_match = Match(
             id="1",
             home_team=home_team,
@@ -432,7 +445,7 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.upcoming_matches["1"] = upcoming_match
-        
+
         active_match = Match(
             id="2",
             home_team=home_team,
@@ -443,7 +456,7 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.active_matches["2"] = active_match
-        
+
         recent_match = Match(
             id="3",
             home_team=home_team,
@@ -454,10 +467,10 @@ class TestMatchTracker:
             competition="Competition A",
         )
         tracker.recent_matches["3"] = recent_match
-        
+
         # Get all matches
         all_matches = tracker.get_all_matches()
-        
+
         # Verify results
         assert len(all_matches["upcoming"]) == 1
         assert len(all_matches["active"]) == 1
@@ -473,26 +486,26 @@ def test_get_match_tracker(mock_tracker_class):
     # First call should create a new instance
     mock_api_client = MagicMock()
     mock_config = MagicMock()
-    
+
     tracker = get_match_tracker(
         api_client=mock_api_client,
         config=mock_config,
         storage_path="/tmp/test",
     )
-    
+
     # Verify instance was created with correct parameters
     mock_tracker_class.assert_called_once_with(
         api_client=mock_api_client,
         config=mock_config,
         storage_path="/tmp/test",
     )
-    
+
     # Reset mock
     mock_tracker_class.reset_mock()
-    
+
     # Second call should return the same instance
     tracker2 = get_match_tracker()
-    
+
     # Verify no new instance was created
     mock_tracker_class.assert_not_called()
     assert tracker == tracker2

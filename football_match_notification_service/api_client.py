@@ -21,16 +21,19 @@ logger = get_logger(__name__)
 
 class APIClientError(Exception):
     """Base exception for API client errors."""
+
     pass
 
 
 class AuthenticationError(APIClientError):
     """Exception raised for authentication errors."""
+
     pass
 
 
 class RateLimitError(APIClientError):
     """Exception raised when API rate limit is exceeded."""
+
     pass
 
 
@@ -79,8 +82,12 @@ class APIClient(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_matches(self, team_id: Optional[str] = None, date_from: Optional[str] = None,
-                   date_to: Optional[str] = None) -> Dict[str, Any]:
+    def get_matches(
+        self,
+        team_id: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Get matches for a team within a date range.
 
@@ -107,7 +114,9 @@ class APIClient(abc.ABC):
         """
         pass
 
-    def _make_request(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _make_request(
+        self, endpoint: str, params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Make an API request.
 
@@ -125,25 +134,29 @@ class APIClient(abc.ABC):
         """
         url = f"{self.base_url}{endpoint}"
         headers = self._get_headers()
-        
+
         try:
             logger.debug(f"Making API request to {url}")
-            response = requests.get(url, headers=headers, params=params, timeout=self.timeout)
-            
+            response = requests.get(
+                url, headers=headers, params=params, timeout=self.timeout
+            )
+
             # Handle HTTP errors
             if response.status_code == 401:
                 raise AuthenticationError(f"Authentication failed: {response.text}")
             elif response.status_code == 429:
                 raise RateLimitError(f"Rate limit exceeded: {response.text}")
             elif response.status_code >= 400:
-                raise APIClientError(f"API error {response.status_code}: {response.text}")
-            
+                raise APIClientError(
+                    f"API error {response.status_code}: {response.text}"
+                )
+
             # Parse JSON response
             try:
                 return response.json()
             except json.JSONDecodeError:
                 raise APIClientError(f"Invalid JSON response: {response.text}")
-                
+
         except requests.RequestException as e:
             raise APIClientError(f"Request failed: {str(e)}")
 
@@ -158,7 +171,9 @@ class FootballDataClient(APIClient):
         Returns:
             str: Base URL for the API
         """
-        return self.config_manager.get("api.football_data.base_url", "https://api.football-data.org/v4")
+        return self.config_manager.get(
+            "api.football_data.base_url", "https://api.football-data.org/v4"
+        )
 
     def _get_timeout(self) -> int:
         """
@@ -179,14 +194,15 @@ class FootballDataClient(APIClient):
         api_key = self.config_manager.get("api.football_data.api_key")
         if not api_key:
             raise AuthenticationError("API key not found in configuration")
-        
-        return {
-            "X-Auth-Token": api_key,
-            "Accept": "application/json"
-        }
 
-    def get_matches(self, team_id: Optional[str] = None, date_from: Optional[str] = None,
-                   date_to: Optional[str] = None) -> Dict[str, Any]:
+        return {"X-Auth-Token": api_key, "Accept": "application/json"}
+
+    def get_matches(
+        self,
+        team_id: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Get matches for a team within a date range.
 
@@ -199,14 +215,14 @@ class FootballDataClient(APIClient):
             Dict[str, Any]: Match data
         """
         params = {}
-        
+
         if team_id:
             params["team"] = team_id
         if date_from:
             params["dateFrom"] = date_from
         if date_to:
             params["dateTo"] = date_to
-            
+
         return self._make_request("/matches", params)
 
     def get_match_details(self, match_id: str) -> Dict[str, Any]:

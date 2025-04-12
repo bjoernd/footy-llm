@@ -106,7 +106,7 @@ class TestTask:
             callback=callback,
             run_at=past_time,
         )
-        
+
         # Force next_run to be in the past for testing
         task.next_run = past_time
 
@@ -299,24 +299,24 @@ class TestScheduler:
     def test_start_stop(self):
         """Test starting and stopping the scheduler."""
         scheduler = Scheduler()
-        
+
         # Start the scheduler
         scheduler.start()
         assert scheduler._running is True
         assert scheduler._thread is not None
         assert scheduler._thread.is_alive() is True
-        
+
         # Try starting again
         scheduler.start()  # Should log a warning but not crash
-        
+
         # Stop the scheduler
         scheduler.stop()
         assert scheduler._running is False
-        
+
         # Give the thread time to stop
         time.sleep(0.1)
         assert scheduler._thread.is_alive() is False
-        
+
         # Try stopping again
         scheduler.stop()  # Should log a warning but not crash
 
@@ -324,10 +324,10 @@ class TestScheduler:
         """Test is_running method."""
         scheduler = Scheduler()
         assert scheduler.is_running() is False
-        
+
         scheduler.start()
         assert scheduler.is_running() is True
-        
+
         scheduler.stop()
         assert scheduler.is_running() is False
 
@@ -336,41 +336,41 @@ class TestScheduler:
         """Test _check_tasks method."""
         scheduler = Scheduler()
         callback = MagicMock()
-        
+
         # Create mock tasks
         task1 = MagicMock()
         task1.name = "task1"
         task1.should_run.return_value = True
         task1.run_once = False
-        
+
         task2 = MagicMock()
         task2.name = "task2"
         task2.should_run.return_value = True
         task2.run_once = True
-        
+
         task3 = MagicMock()
         task3.name = "task3"
         task3.should_run.return_value = False
-        
+
         # Add tasks to scheduler
         scheduler.tasks = {
             "task1": task1,
             "task2": task2,
             "task3": task3,
         }
-        
+
         # Run _check_tasks
         scheduler._check_tasks()
-        
+
         # Verify task execution
         task1.should_run.assert_called_once()
         task1.execute.assert_called_once()
         assert "task1" in scheduler.tasks  # Not removed
-        
+
         task2.should_run.assert_called_once()
         task2.execute.assert_called_once()
         assert "task2" not in scheduler.tasks  # Removed because run_once=True
-        
+
         task3.should_run.assert_called_once()
         task3.execute.assert_not_called()
         assert "task3" in scheduler.tasks  # Not removed
@@ -379,26 +379,26 @@ class TestScheduler:
         """Test the scheduler with real task execution."""
         scheduler = Scheduler(check_interval=0.1)
         counter = {"count": 0}
-        
+
         def increment_counter():
             counter["count"] += 1
-        
+
         # Add a task that runs immediately and every 0.2 seconds
         scheduler.add_task(
             name="increment",
             callback=increment_counter,
             interval=0.2,
         )
-        
+
         # Start the scheduler
         scheduler.start()
-        
+
         # Let it run for a bit
         time.sleep(0.5)
-        
+
         # Stop the scheduler
         scheduler.stop()
-        
+
         # Check that the counter was incremented at least twice
         # (once immediately and at least once more after 0.2 seconds)
         assert counter["count"] >= 2
@@ -411,10 +411,10 @@ class TestGetScheduler:
         """Test get_scheduler returns a singleton instance."""
         scheduler1 = get_scheduler()
         scheduler2 = get_scheduler()
-        
+
         assert scheduler1 is scheduler2
         assert isinstance(scheduler1, Scheduler)
-        
+
         # Test with different check_interval
         scheduler3 = get_scheduler(check_interval=5)
         assert scheduler3 is scheduler1  # Still the same instance
