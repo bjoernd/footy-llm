@@ -17,6 +17,7 @@ class MatchStatus(Enum):
     TIMED = "TIMED"
     IN_PLAY = "IN_PLAY"
     PAUSED = "PAUSED"
+    HALF_TIME = "HALF_TIME"  # Added HALF_TIME status
     FINISHED = "FINISHED"
     SUSPENDED = "SUSPENDED"
     POSTPONED = "POSTPONED"
@@ -160,6 +161,7 @@ class Match:
     matchday: Optional[int] = None
     last_updated: Optional[datetime.datetime] = None
     events: List[Event] = field(default_factory=list)
+    minute: Optional[int] = None
 
     def __post_init__(self):
         """Validate and normalize match data."""
@@ -205,6 +207,22 @@ class Match:
     def __str__(self) -> str:
         """String representation of match."""
         return f"{self.home_team.name} {self.score} {self.away_team.name} ({self.status.value})"
+        
+    def copy(self) -> "Match":
+        """Create a copy of the match object."""
+        return Match(
+            id=self.id,
+            home_team=self.home_team,
+            away_team=self.away_team,
+            start_time=self.start_time,
+            status=self.status,
+            score=Score(home=self.score.home, away=self.score.away),
+            competition=self.competition,
+            matchday=self.matchday,
+            last_updated=self.last_updated,
+            events=self.events.copy() if self.events else [],
+            minute=self.minute,
+        )
 
     def to_dict(self) -> Dict:
         """Convert the Match object to a dictionary."""
@@ -232,6 +250,7 @@ class Match:
             },
             "competition": self.competition,
             "matchday": self.matchday,
+            "minute": self.minute,
             "last_updated": (
                 self.last_updated.isoformat() if self.last_updated else None
             ),
@@ -288,4 +307,5 @@ class Match:
             matchday=data.get("matchday"),
             last_updated=last_updated,
             events=events,
+            minute=data.get("minute"),
         )

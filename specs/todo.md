@@ -71,11 +71,11 @@
 - [x] Write tests for match tracking (2025-04-12 13:22:30)
 
 ### Event Detection
-- [ ] Create event_detector.py module
-- [ ] Implement match start/end detection
-- [ ] Add goal detection logic
-- [ ] Implement half-time and statistics detection
-- [ ] Write tests for event detection
+- [x] Create event_detector.py module (2025-04-13 13:48:05)
+- [x] Implement match start/end detection (2025-04-13 13:48:05)
+- [x] Add goal detection logic (2025-04-13 13:48:05)
+- [x] Implement half-time and statistics detection (2025-04-13 13:48:05)
+- [x] Write tests for event detection (2025-04-13 13:48:05)
 
 ### Match History Storage
 - [ ] Design SQLite database schema
