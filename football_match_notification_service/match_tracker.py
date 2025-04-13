@@ -5,7 +5,7 @@ This module provides functionality for discovering and tracking football matches
 for configured teams. It handles:
 - Discovering upcoming matches for teams of interest
 - Tracking match status changes
-- Determining when to start/stop polling for match updates
+- Determining when to start/stop polling for a match
 - Storing match information for later reference
 """
 
@@ -16,11 +16,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Any
 
-from football_match_notification_service.api_client import FootballDataClient
+from football_match_notification_service.api_client import APIFootballClient
 from football_match_notification_service.config_manager import ConfigManager
 from football_match_notification_service.logger import get_logger
-from football_match_notification_service.models import Match, Team, MatchStatus
-from football_match_notification_service.parsers import FootballDataParser
+from football_match_notification_service.models import Match, Team, MatchStatus, Score
+from football_match_notification_service.parsers import APIFootballParser
 
 logger = get_logger(__name__)
 
@@ -32,7 +32,7 @@ class MatchTracker:
 
     def __init__(
         self,
-        api_client: FootballDataClient,
+        api_client: APIFootballClient,
         config: ConfigManager,
         storage_path: Optional[str] = None,
     ):
@@ -46,359 +46,359 @@ class MatchTracker:
         """
         self.api_client = api_client
         self.config = config
-        self.parser = FootballDataParser()
-
+        self.parser = APIFootballParser()
+        
         # Set up storage path
-        if storage_path is None:
-            home_dir = os.path.expanduser("~")
-            storage_path = os.path.join(home_dir, ".football_matches")
-
-        self.storage_path = Path(storage_path)
+        if storage_path:
+            self.storage_path = Path(storage_path)
+        else:
+            self.storage_path = Path.home() / ".football_matches"
+            
+        # Create storage directory if it doesn't exist
         self.storage_path.mkdir(parents=True, exist_ok=True)
-
+        
         # Initialize match storage
-        self.upcoming_matches: Dict[str, Match] = {}
-        self.active_matches: Dict[str, Match] = {}
-        self.recent_matches: Dict[str, Match] = {}
+        self.matches: Dict[str, Match] = {}
+        self.load_matches()
 
-        # Load stored matches
-        self._load_matches()
-
-        # Get team configuration
-        self.teams_to_track = self._get_teams_to_track()
-        self.team_ids = {team.id for team in self.teams_to_track}
-
-        # Configuration for match discovery
-        self.discovery_days = self.config.get("polling.discovery_days", 3)
-        self.match_retention_days = self.config.get("polling.match_retention_days", 7)
-
-        logger.info(f"Match tracker initialized with {len(self.teams_to_track)} teams")
-
-    def _get_teams_to_track(self) -> List[Team]:
+    def discover_matches(self, days_ahead: Optional[int] = None) -> List[Match]:
         """
-        Get the list of teams to track from configuration.
+        Discover upcoming matches for configured teams.
+
+        Args:
+            days_ahead: Number of days ahead to look for matches (default: from config)
 
         Returns:
-            List of Team objects
+            List of discovered matches
         """
-        teams_config = self.config.get("teams", [])
-        teams = []
-
-        for team_config in teams_config:
-            team = Team(
-                id=team_config.get("team_id"),
-                name=team_config.get("name"),
-                short_name=team_config.get("short_name", team_config.get("name")),
-                country=team_config.get("country", ""),
-            )
-            teams.append(team)
-
-        return teams
-
-    def discover_matches(self) -> List[Match]:
-        """
-        Discover upcoming matches for tracked teams.
-
-        Returns:
-            List of newly discovered matches
-        """
-        logger.info("Discovering upcoming matches")
-
-        # Calculate date range for discovery
+        if days_ahead is None:
+            days_ahead = self.config.get_with_default("polling_settings.match_discovery_days") or 3
+            
+        logger.info(f"Discovering matches for the next {days_ahead} days")
+        
+        # Get configured teams
+        teams = self.config.get("teams", [])
+        if not teams:
+            logger.warning("No teams configured for match discovery")
+            return []
+            
+        # Calculate date range
         today = datetime.now().date()
-        end_date = today + timedelta(days=self.discovery_days)
-
+        end_date = today + timedelta(days=days_ahead)
+        
+        today_str = today.strftime("%Y-%m-%d")
+        end_date_str = end_date.strftime("%Y-%m-%d")
+        
+        discovered_matches = []
+        
         # Fetch matches for each team
-        new_matches = []
-
-        for team in self.teams_to_track:
+        for team_config in teams:
+            team_id = team_config.get("team_id")
+            team_name = team_config.get("name")
+            
+            if not team_id:
+                logger.warning(f"Missing team_id for team: {team_name}")
+                continue
+                
+            logger.info(f"Fetching matches for team: {team_name} (ID: {team_id})")
+            
             try:
                 # Get matches for this team
-                response = self.api_client.get_team_matches(
-                    team_id=team.id,
-                    date_from=today.isoformat(),
-                    date_to=end_date.isoformat(),
+                response = self.api_client.get_matches_by_team(
+                    team_id=team_id,
+                    from_date=today_str,
+                    to_date=end_date_str,
                 )
-
+                
                 # Parse matches
                 matches = self.parser.parse_matches(response)
-
-                # Filter for matches not already tracked
+                
+                # Add to discovered matches
                 for match in matches:
-                    match_id = match.id
-
-                    if (
-                        match_id not in self.upcoming_matches
-                        and match_id not in self.active_matches
-                        and match_id not in self.recent_matches
-                    ):
-
-                        self.upcoming_matches[match_id] = match
-                        new_matches.append(match)
-                        logger.info(
-                            f"Discovered new match: {match.home_team.name} vs {match.away_team.name}"
-                        )
-
+                    # Check if we already know about this match
+                    if match.id in self.matches:
+                        # Update existing match with new data
+                        self.matches[match.id] = match
+                        logger.debug(f"Updated existing match: {match.home_team.name} vs {match.away_team.name}")
+                    else:
+                        # Add new match
+                        self.matches[match.id] = match
+                        discovered_matches.append(match)
+                        logger.info(f"Discovered new match: {match.home_team.name} vs {match.away_team.name} on {match.start_time}")
+                
             except Exception as e:
-                logger.error(
-                    f"Error discovering matches for team {team.name}: {str(e)}"
-                )
-
+                logger.error(f"Error discovering matches for team {team_name}: {e}")
+                
         # Save updated matches
-        self._save_matches()
-
-        return new_matches
-
-    def update_match_status(self, match_id: str) -> Tuple[Optional[Match], bool]:
-        """
-        Update the status of a specific match.
-
-        Args:
-            match_id: ID of the match to update
-
-        Returns:
-            Tuple of (updated match, status_changed)
-        """
-        # Find the match in our collections
-        match = None
-        if match_id in self.upcoming_matches:
-            match = self.upcoming_matches[match_id]
-        elif match_id in self.active_matches:
-            match = self.active_matches[match_id]
-        elif match_id in self.recent_matches:
-            match = self.recent_matches[match_id]
-
-        if not match:
-            logger.warning(f"Attempted to update unknown match: {match_id}")
-            return None, False
-
-        try:
-            # Fetch current match data
-            response = self.api_client.get_match(match_id)
-            updated_match = self.parser.parse_match(response)
-
-            # Check if status changed
-            status_changed = match.status != updated_match.status
-
-            # Update match in appropriate collection based on status
-            if updated_match.status == MatchStatus.FINISHED:
-                # Move to recent matches if finished
-                if match_id in self.upcoming_matches:
-                    del self.upcoming_matches[match_id]
-                if match_id in self.active_matches:
-                    del self.active_matches[match_id]
-                self.recent_matches[match_id] = updated_match
-
-            elif updated_match.status in [
-                MatchStatus.IN_PLAY,
-                MatchStatus.PAUSED,
-                MatchStatus.SUSPENDED,
-            ]:
-                # Move to active matches if in play
-                if match_id in self.upcoming_matches:
-                    del self.upcoming_matches[match_id]
-                if match_id in self.recent_matches:
-                    del self.recent_matches[match_id]
-                self.active_matches[match_id] = updated_match
-
-            else:
-                # Keep in upcoming matches
-                if match_id in self.active_matches:
-                    del self.active_matches[match_id]
-                if match_id in self.recent_matches:
-                    del self.recent_matches[match_id]
-                self.upcoming_matches[match_id] = updated_match
-
-            # Save updated matches
-            self._save_matches()
-
-            if status_changed:
-                logger.info(
-                    f"Match status changed: {updated_match.home_team.name} vs {updated_match.away_team.name} - {updated_match.status}"
-                )
-
-            return updated_match, status_changed
-
-        except Exception as e:
-            logger.error(f"Error updating match {match_id}: {str(e)}")
-            return match, False
-
-    def get_matches_to_monitor(self) -> List[Match]:
-        """
-        Get matches that should be actively monitored.
-
-        Returns:
-            List of matches to monitor
-        """
-        # All active matches should be monitored
-        matches_to_monitor = list(self.active_matches.values())
-
-        # Add upcoming matches that are starting soon
-        now = datetime.now()
-        soon = now + timedelta(minutes=30)
-
-        for match in self.upcoming_matches.values():
-            if match.start_time and match.start_time <= soon:
-                matches_to_monitor.append(match)
-
-        return matches_to_monitor
-
-    def clean_old_matches(self) -> int:
-        """
-        Remove old matches from storage.
-
-        Returns:
-            Number of matches removed
-        """
-        cutoff_date = datetime.now() - timedelta(days=self.match_retention_days)
-        matches_to_remove = []
-
-        for match_id, match in self.recent_matches.items():
-            if match.start_time and match.start_time < cutoff_date:
-                matches_to_remove.append(match_id)
-
-        for match_id in matches_to_remove:
-            del self.recent_matches[match_id]
-
-        if matches_to_remove:
-            self._save_matches()
-            logger.info(f"Removed {len(matches_to_remove)} old matches from storage")
-
-        return len(matches_to_remove)
-
-    def _load_matches(self) -> None:
-        """Load matches from storage files."""
-        self._load_match_collection("upcoming_matches")
-        self._load_match_collection("active_matches")
-        self._load_match_collection("recent_matches")
-
-    def _load_match_collection(self, collection_name: str) -> None:
-        """
-        Load a specific match collection from storage.
-
-        Args:
-            collection_name: Name of the collection to load
-        """
-        file_path = self.storage_path / f"{collection_name}.json"
-
-        if not file_path.exists():
-            return
-
-        try:
-            with open(file_path, "r") as f:
-                data = json.load(f)
-
-            matches = {}
-            for match_data in data:
-                match = Match.from_dict(match_data)
-                matches[match.id] = match
-
-            setattr(self, collection_name, matches)
-            logger.debug(f"Loaded {len(matches)} matches from {collection_name}")
-
-        except Exception as e:
-            logger.error(f"Error loading {collection_name}: {str(e)}")
-
-    def _save_matches(self) -> None:
-        """Save all match collections to storage."""
-        self._save_match_collection("upcoming_matches")
-        self._save_match_collection("active_matches")
-        self._save_match_collection("recent_matches")
-
-    def _save_match_collection(self, collection_name: str) -> None:
-        """
-        Save a specific match collection to storage.
-
-        Args:
-            collection_name: Name of the collection to save
-        """
-        file_path = self.storage_path / f"{collection_name}.json"
-
-        try:
-            matches = getattr(self, collection_name)
-            data = [match.to_dict() for match in matches.values()]
-
-            with open(file_path, "w") as f:
-                json.dump(data, f, indent=2)
-
-            logger.debug(f"Saved {len(data)} matches to {collection_name}")
-
-        except Exception as e:
-            logger.error(f"Error saving {collection_name}: {str(e)}")
+        self.save_matches()
+        
+        return discovered_matches
 
     def get_match(self, match_id: str) -> Optional[Match]:
         """
         Get a match by ID.
 
         Args:
-            match_id: ID of the match to get
+            match_id: Match ID
 
         Returns:
             Match if found, None otherwise
         """
-        if match_id in self.upcoming_matches:
-            return self.upcoming_matches[match_id]
-        elif match_id in self.active_matches:
-            return self.active_matches[match_id]
-        elif match_id in self.recent_matches:
-            return self.recent_matches[match_id]
-        return None
+        return self.matches.get(match_id)
 
-    def get_all_matches(self) -> Dict[str, List[Match]]:
+    def get_matches_by_status(self, status: MatchStatus) -> List[Match]:
         """
-        Get all tracked matches organized by status.
+        Get matches with a specific status.
+
+        Args:
+            status: Match status to filter by
 
         Returns:
-            Dictionary with upcoming, active, and recent matches
+            List of matches with the specified status
         """
-        return {
-            "upcoming": list(self.upcoming_matches.values()),
-            "active": list(self.active_matches.values()),
-            "recent": list(self.recent_matches.values()),
-        }
+        return [match for match in self.matches.values() if match.status == status]
 
+    def get_active_matches(self) -> List[Match]:
+        """
+        Get all active matches (in-play or half-time).
 
-# Singleton instance
-_match_tracker_instance: Optional[MatchTracker] = None
+        Returns:
+            List of active matches
+        """
+        active_statuses = [MatchStatus.IN_PLAY, MatchStatus.HALF_TIME, MatchStatus.PAUSED]
+        return [match for match in self.matches.values() if match.status in active_statuses]
 
+    def get_upcoming_matches(self, hours: int = 24) -> List[Match]:
+        """
+        Get upcoming matches within the specified time window.
 
-def get_match_tracker(
-    api_client: Optional[FootballDataClient] = None,
-    config: Optional[ConfigManager] = None,
-    storage_path: Optional[str] = None,
-) -> MatchTracker:
-    """
-    Get the singleton match tracker instance.
+        Args:
+            hours: Number of hours to look ahead
 
-    Args:
-        api_client: API client for fetching match data
-        config: Configuration manager
-        storage_path: Path to store match data
+        Returns:
+            List of upcoming matches
+        """
+        now = datetime.now()
+        cutoff = now + timedelta(hours=hours)
+        
+        upcoming_statuses = [MatchStatus.SCHEDULED, MatchStatus.TIMED]
+        
+        return [
+            match for match in self.matches.values()
+            if match.status in upcoming_statuses and now <= match.start_time <= cutoff
+        ]
 
-    Returns:
-        The match tracker instance
-    """
-    global _match_tracker_instance
+    def update_match_status(self, match_id: str) -> Optional[Match]:
+        """
+        Update the status of a specific match.
 
-    if _match_tracker_instance is None:
-        from football_match_notification_service.config_manager import (
-            get_config_manager,
-        )
+        Args:
+            match_id: Match ID
 
-        if api_client is None:
-            from football_match_notification_service.api_client import (
-                get_football_data_client,
-            )
+        Returns:
+            Updated match if successful, None otherwise
+        """
+        if match_id not in self.matches:
+            logger.warning(f"Cannot update unknown match: {match_id}")
+            return None
+            
+        try:
+            # Get latest match data
+            response = self.api_client.get_match_details(match_id)
+            
+            # Parse match data
+            matches = self.parser.parse_matches(response)
+            
+            if not matches:
+                logger.warning(f"No match data returned for ID: {match_id}")
+                return None
+                
+            # Update match in storage
+            updated_match = matches[0]
+            old_match = self.matches[match_id]
+            
+            # Check if status has changed
+            if old_match.status != updated_match.status:
+                logger.info(
+                    f"Match status changed: {old_match.home_team.name} vs {old_match.away_team.name} "
+                    f"from {old_match.status.value} to {updated_match.status.value}"
+                )
+                
+            # Check if score has changed
+            if old_match.score.home != updated_match.score.home or old_match.score.away != updated_match.score.away:
+                logger.info(
+                    f"Score changed: {old_match.home_team.name} vs {old_match.away_team.name} "
+                    f"from {old_match.score.home}-{old_match.score.away} to "
+                    f"{updated_match.score.home}-{updated_match.score.away}"
+                )
+                
+            # Update match
+            self.matches[match_id] = updated_match
+            self.save_matches()
+            
+            return updated_match
+            
+        except Exception as e:
+            logger.error(f"Error updating match {match_id}: {e}")
+            return None
 
-            api_client = get_football_data_client()
+    def update_active_matches(self) -> List[Match]:
+        """
+        Update all active matches.
 
-        if config is None:
-            config = get_config_manager()
+        Returns:
+            List of updated matches
+        """
+        active_matches = self.get_active_matches()
+        
+        if not active_matches:
+            logger.debug("No active matches to update")
+            return []
+            
+        logger.info(f"Updating {len(active_matches)} active matches")
+        
+        updated_matches = []
+        
+        for match in active_matches:
+            updated_match = self.update_match_status(match.id)
+            if updated_match:
+                updated_matches.append(updated_match)
+                
+        return updated_matches
 
-        _match_tracker_instance = MatchTracker(
-            api_client=api_client,
-            config=config,
-            storage_path=storage_path,
-        )
+    def clean_old_matches(self, days: Optional[int] = None) -> int:
+        """
+        Remove old matches from storage.
 
-    return _match_tracker_instance
+        Args:
+            days: Number of days to keep matches for (default: from config)
+
+        Returns:
+            Number of matches removed
+        """
+        if days is None:
+            days = self.config.get_with_default("polling_settings.match_history_days") or 7
+            
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        old_matches = [
+            match_id for match_id, match in self.matches.items()
+            if match.start_time < cutoff and match.status in [MatchStatus.FINISHED, MatchStatus.CANCELLED, MatchStatus.POSTPONED]
+        ]
+        
+        if not old_matches:
+            logger.debug(f"No matches older than {days} days to clean up")
+            return 0
+            
+        logger.info(f"Cleaning up {len(old_matches)} matches older than {days} days")
+        
+        for match_id in old_matches:
+            del self.matches[match_id]
+            
+        self.save_matches()
+        
+        return len(old_matches)
+
+    def save_matches(self) -> None:
+        """
+        Save matches to storage.
+        """
+        matches_file = self.storage_path / "matches.json"
+        
+        # Convert matches to serializable format
+        serialized_matches = {}
+        for match_id, match in self.matches.items():
+            serialized_matches[match_id] = {
+                "id": match.id,
+                "home_team": {
+                    "id": match.home_team.id,
+                    "name": match.home_team.name,
+                    "short_name": match.home_team.short_name,
+                    "logo_url": match.home_team.logo_url,
+                    "country": match.home_team.country,
+                },
+                "away_team": {
+                    "id": match.away_team.id,
+                    "name": match.away_team.name,
+                    "short_name": match.away_team.short_name,
+                    "logo_url": match.away_team.logo_url,
+                    "country": match.away_team.country,
+                },
+                "start_time": match.start_time.isoformat(),
+                "status": match.status.value,
+                "score": {
+                    "home": match.score.home,
+                    "away": match.score.away,
+                },
+                "competition": match.competition,
+                "venue": match.venue,
+                "referee": match.referee,
+                "round": match.round,
+                "season": match.season,
+            }
+            
+        try:
+            with open(matches_file, "w") as f:
+                json.dump(serialized_matches, f, indent=2)
+                
+            logger.debug(f"Saved {len(self.matches)} matches to {matches_file}")
+        except Exception as e:
+            logger.error(f"Error saving matches to {matches_file}: {e}")
+
+    def load_matches(self) -> None:
+        """
+        Load matches from storage.
+        """
+        matches_file = self.storage_path / "matches.json"
+        
+        if not matches_file.exists():
+            logger.debug(f"No matches file found at {matches_file}")
+            return
+            
+        try:
+            with open(matches_file, "r") as f:
+                serialized_matches = json.load(f)
+                
+            # Convert serialized matches back to Match objects
+            for match_id, match_data in serialized_matches.items():
+                home_team = Team(
+                    id=match_data["home_team"]["id"],
+                    name=match_data["home_team"]["name"],
+                    short_name=match_data["home_team"].get("short_name"),
+                    logo_url=match_data["home_team"].get("logo_url"),
+                    country=match_data["home_team"].get("country"),
+                )
+                
+                away_team = Team(
+                    id=match_data["away_team"]["id"],
+                    name=match_data["away_team"]["name"],
+                    short_name=match_data["away_team"].get("short_name"),
+                    logo_url=match_data["away_team"].get("logo_url"),
+                    country=match_data["away_team"].get("country"),
+                )
+                
+                start_time = datetime.fromisoformat(match_data["start_time"])
+                status = MatchStatus(match_data["status"])
+                score = Score(home=match_data["score"]["home"], away=match_data["score"]["away"])
+                
+                match = Match(
+                    id=match_data["id"],
+                    home_team=home_team,
+                    away_team=away_team,
+                    start_time=start_time,
+                    status=status,
+                    score=score,
+                    competition=match_data.get("competition"),
+                    venue=match_data.get("venue"),
+                    referee=match_data.get("referee"),
+                    round=match_data.get("round"),
+                    season=match_data.get("season"),
+                )
+                
+                self.matches[match_id] = match
+                
+            logger.info(f"Loaded {len(self.matches)} matches from {matches_file}")
+        except Exception as e:
+            logger.error(f"Error loading matches from {matches_file}: {e}")
+            # Initialize with empty dict if loading fails
+            self.matches = {}

@@ -4,508 +4,404 @@ Tests for the match tracker module.
 
 import json
 import os
-import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from football_match_notification_service.match_tracker import (
-    MatchTracker,
-    get_match_tracker,
-)
-from football_match_notification_service.models import Match, Team, Score, MatchStatus
+from football_match_notification_service.api_client import APIFootballClient
+from football_match_notification_service.config_manager import ConfigManager
+from football_match_notification_service.match_tracker import MatchTracker
+from football_match_notification_service.models import Match, MatchStatus, Score, Team
 
 
 class TestMatchTracker:
-    """Tests for the MatchTracker class."""
-
-    @pytest.fixture
-    def mock_api_client(self):
-        """Create a mock API client."""
-        mock_client = MagicMock()
-        return mock_client
+    """Tests for the match tracker."""
 
     @pytest.fixture
     def mock_config(self):
         """Create a mock configuration manager."""
-        mock_config = MagicMock()
-        mock_config.get.side_effect = lambda key, default=None: {
+        config = MagicMock(spec=ConfigManager)
+        config.get.side_effect = lambda key, default=None: {
             "teams": [
-                {
-                    "team_id": "1",
-                    "name": "Team A",
-                    "short_name": "TA",
-                    "country": "Country A",
-                },
-                {
-                    "team_id": "2",
-                    "name": "Team B",
-                    "short_name": "TB",
-                    "country": "Country B",
-                },
+                {"name": "Test Team 1", "team_id": "123"},
+                {"name": "Test Team 2", "team_id": "456"},
             ],
-            "polling.discovery_days": 3,
-            "polling.match_retention_days": 7,
+            "polling_settings.match_discovery_days": 3,
+            "polling_settings.match_history_days": 7,
         }.get(key, default)
-        return mock_config
+        config.get_with_default.side_effect = lambda key: {
+            "polling_settings.match_discovery_days": 3,
+            "polling_settings.match_history_days": 7,
+        }.get(key)
+        return config
 
     @pytest.fixture
-    def temp_storage_path(self):
-        """Create a temporary directory for match storage."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            yield temp_dir
+    def mock_api_client(self):
+        """Create a mock API client."""
+        return MagicMock(spec=APIFootballClient)
 
     @pytest.fixture
-    def tracker(self, mock_api_client, mock_config, temp_storage_path):
-        """Create a match tracker instance."""
-        return MatchTracker(
-            api_client=mock_api_client,
-            config=mock_config,
-            storage_path=temp_storage_path,
-        )
+    def temp_storage_path(self, tmp_path):
+        """Create a temporary storage path."""
+        return tmp_path / "football_matches"
 
-    def test_init(self, tracker, mock_api_client, mock_config):
-        """Test MatchTracker initialization."""
-        assert tracker.api_client == mock_api_client
-        assert tracker.config == mock_config
-        assert len(tracker.teams_to_track) == 2
-        assert tracker.team_ids == {"1", "2"}
-        assert tracker.discovery_days == 3
-        assert tracker.match_retention_days == 7
-        assert isinstance(tracker.storage_path, Path)
-        assert tracker.storage_path.exists()
+    @pytest.fixture
+    def match_tracker(self, mock_api_client, mock_config, temp_storage_path):
+        """Create a match tracker with mock dependencies."""
+        with patch("football_match_notification_service.match_tracker.APIFootballParser"):
+            tracker = MatchTracker(
+                api_client=mock_api_client,
+                config=mock_config,
+                storage_path=temp_storage_path,
+            )
+            return tracker
 
-    def test_get_teams_to_track(self, tracker):
-        """Test _get_teams_to_track method."""
-        teams = tracker.teams_to_track
-        assert len(teams) == 2
-        assert teams[0].id == "1"
-        assert teams[0].name == "Team A"
-        assert teams[0].short_name == "TA"
-        assert teams[0].country == "Country A"
-        assert teams[1].id == "2"
-        assert teams[1].name == "Team B"
-        assert teams[1].short_name == "TB"
-        assert teams[1].country == "Country B"
+    def test_init(self, match_tracker, temp_storage_path):
+        """Test initialization."""
+        assert match_tracker.storage_path == temp_storage_path
+        assert temp_storage_path.exists()
+        assert isinstance(match_tracker.matches, dict)
 
-    def test_discover_matches(self, tracker, mock_api_client):
-        """Test discover_matches method."""
+    def test_discover_matches(self, match_tracker, mock_api_client):
+        """Test discovering matches."""
         # Mock API response
-        mock_api_client.get_team_matches.return_value = {
-            "matches": [
+        mock_response = {
+            "response": [
                 {
-                    "id": 1,
-                    "homeTeam": {"id": 1, "name": "Team A"},
-                    "awayTeam": {"id": 3, "name": "Team C"},
-                    "utcDate": (datetime.now() + timedelta(days=1)).isoformat(),
-                    "status": "SCHEDULED",
-                    "score": {"fullTime": {"home": None, "away": None}},
-                    "competition": {"id": 1, "name": "Competition A"},
-                },
-                {
-                    "id": 2,
-                    "homeTeam": {"id": 3, "name": "Team C"},
-                    "awayTeam": {"id": 2, "name": "Team B"},
-                    "utcDate": (datetime.now() + timedelta(days=2)).isoformat(),
-                    "status": "SCHEDULED",
-                    "score": {"fullTime": {"home": None, "away": None}},
-                    "competition": {"id": 1, "name": "Competition A"},
+                    "fixture": {
+                        "id": 789,
+                        "date": "2023-01-01T15:00:00Z",
+                        "status": {"short": "NS"},
+                    },
+                    "teams": {
+                        "home": {"id": 123, "name": "Test Team 1"},
+                        "away": {"id": 456, "name": "Test Team 2"},
+                    },
+                    "goals": {"home": 0, "away": 0},
+                    "league": {"name": "Test League"},
                 },
             ]
         }
+        mock_api_client.get_matches_by_team.return_value = mock_response
 
-        # Call discover_matches
-        new_matches = tracker.discover_matches()
+        # Create a proper mock match with all required attributes
+        home_team = Team(id="123", name="Test Team 1")
+        away_team = Team(id="456", name="Test Team 2")
+        score = Score(home=0, away=0)
+        mock_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.now() + timedelta(days=1),
+            status=MatchStatus.SCHEDULED,
+            score=score
+        )
+
+        # Mock parser to return our properly constructed match
+        match_tracker.parser.parse_matches.return_value = [mock_match]
+
+        # Call method
+        discovered = match_tracker.discover_matches()
 
         # Verify API calls
-        assert mock_api_client.get_team_matches.call_count == 2
+        assert mock_api_client.get_matches_by_team.call_count == 2
+        mock_api_client.get_matches_by_team.assert_any_call(
+            team_id="123",
+            from_date=datetime.now().date().strftime("%Y-%m-%d"),
+            to_date=(datetime.now().date() + timedelta(days=3)).strftime("%Y-%m-%d"),
+        )
 
-        # Verify discovered matches
-        assert len(new_matches) == 2
-        assert len(tracker.upcoming_matches) == 2
-        assert "1" in tracker.upcoming_matches
-        assert "2" in tracker.upcoming_matches
+        # Verify parser calls
+        assert match_tracker.parser.parse_matches.call_count == 2
 
-    def test_update_match_status_unknown_match(self, tracker):
-        """Test update_match_status with unknown match ID."""
-        result, changed = tracker.update_match_status("999")
+        # Verify result - we only get one match because the same match is returned for both teams
+        assert len(discovered) == 1
+        assert "789" in match_tracker.matches
+
+    def test_get_match(self, match_tracker):
+        """Test getting a match by ID."""
+        # Add a test match
+        mock_match = MagicMock(spec=Match)
+        mock_match.id = "123"
+        match_tracker.matches["123"] = mock_match
+
+        # Get the match
+        result = match_tracker.get_match("123")
+        assert result == mock_match
+
+        # Try to get a non-existent match
+        result = match_tracker.get_match("456")
         assert result is None
-        assert changed is False
 
-    def test_update_match_status_to_in_play(self, tracker, mock_api_client):
-        """Test updating match status from scheduled to in play."""
-        # Add a match to upcoming_matches
-        home_team = Team(id="1", name="Team A")
-        away_team = Team(id="2", name="Team B")
-        match = Match(
-            id="1",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() + timedelta(minutes=30),
-            status="SCHEDULED",
-            score=Score(home=None, away=None),
-            competition="Competition A",
-        )
-        tracker.upcoming_matches["1"] = match
+    def test_get_matches_by_status(self, match_tracker):
+        """Test getting matches by status."""
+        # Add test matches
+        match1 = MagicMock(spec=Match)
+        match1.id = "1"
+        match1.status = MatchStatus.IN_PLAY
 
-        # Mock API response for updated match
-        mock_api_client.get_match.return_value = {
-            "id": 1,
-            "homeTeam": {"id": 1, "name": "Team A"},
-            "awayTeam": {"id": 2, "name": "Team B"},
-            "utcDate": datetime.now().isoformat(),
-            "status": "IN_PLAY",
-            "score": {"fullTime": {"home": 1, "away": 0}},
-            "competition": {"id": 1, "name": "Competition A"},
+        match2 = MagicMock(spec=Match)
+        match2.id = "2"
+        match2.status = MatchStatus.FINISHED
+
+        match3 = MagicMock(spec=Match)
+        match3.id = "3"
+        match3.status = MatchStatus.IN_PLAY
+
+        match_tracker.matches = {
+            "1": match1,
+            "2": match2,
+            "3": match3,
         }
 
-        # Update match status
-        updated_match, status_changed = tracker.update_match_status("1")
+        # Get matches by status
+        in_play = match_tracker.get_matches_by_status(MatchStatus.IN_PLAY)
+        finished = match_tracker.get_matches_by_status(MatchStatus.FINISHED)
+        scheduled = match_tracker.get_matches_by_status(MatchStatus.SCHEDULED)
 
-        # Verify results
-        assert updated_match is not None
-        assert status_changed is True
-        assert updated_match.status == MatchStatus.IN_PLAY
-        assert updated_match.score.home == 1
-        assert updated_match.score.away == 0
-        assert "1" not in tracker.upcoming_matches
-        assert "1" in tracker.active_matches
-        assert "1" in tracker.active_matches
+        assert len(in_play) == 2
+        assert match1 in in_play
+        assert match3 in in_play
 
-    def test_update_match_status_to_finished(self, tracker, mock_api_client):
-        """Test updating match status from in play to finished."""
-        # Add a match to active_matches
-        home_team = Team(id="1", name="Team A")
-        away_team = Team(id="2", name="Team B")
-        match = Match(
-            id="1",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() - timedelta(hours=1),
-            status="IN_PLAY",
-            score=Score(home=1, away=0),
-            competition="Competition A",
-        )
-        tracker.active_matches["1"] = match
+        assert len(finished) == 1
+        assert match2 in finished
 
-        # Mock API response for updated match
-        mock_api_client.get_match.return_value = {
-            "id": 1,
-            "homeTeam": {"id": 1, "name": "Team A"},
-            "awayTeam": {"id": 2, "name": "Team B"},
-            "utcDate": (datetime.now() - timedelta(hours=1)).isoformat(),
-            "status": "FINISHED",
-            "score": {"fullTime": {"home": 2, "away": 1}},
-            "competition": {"id": 1, "name": "Competition A"},
+        assert len(scheduled) == 0
+
+    def test_get_active_matches(self, match_tracker):
+        """Test getting active matches."""
+        # Add test matches
+        match1 = MagicMock(spec=Match)
+        match1.id = "1"
+        match1.status = MatchStatus.IN_PLAY
+
+        match2 = MagicMock(spec=Match)
+        match2.id = "2"
+        match2.status = MatchStatus.FINISHED
+
+        match3 = MagicMock(spec=Match)
+        match3.id = "3"
+        match3.status = MatchStatus.HALF_TIME
+
+        match4 = MagicMock(spec=Match)
+        match4.id = "4"
+        match4.status = MatchStatus.SCHEDULED
+
+        match_tracker.matches = {
+            "1": match1,
+            "2": match2,
+            "3": match3,
+            "4": match4,
         }
 
-        # Update match status
-        updated_match, status_changed = tracker.update_match_status("1")
+        # Get active matches
+        active = match_tracker.get_active_matches()
 
-        # Verify results
-        assert updated_match is not None
-        assert status_changed is True
-        assert updated_match.status == MatchStatus.FINISHED
-        assert updated_match.score.home == 2
-        assert updated_match.score.away == 1
-        assert "1" not in tracker.active_matches
-        assert "1" in tracker.recent_matches
-        assert "1" not in tracker.active_matches
-        assert "1" in tracker.recent_matches
+        assert len(active) == 2
+        assert match1 in active
+        assert match3 in active
 
-    def test_get_matches_to_monitor(self, tracker):
-        """Test get_matches_to_monitor method."""
-        # Add matches to collections
-        home_team = Team(id="1", name="Team A")
-        away_team = Team(id="2", name="Team B")
+    def test_get_upcoming_matches(self, match_tracker):
+        """Test getting upcoming matches."""
+        now = datetime.now()
 
-        # Active match
-        active_match = Match(
-            id="1",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() - timedelta(minutes=30),
-            status="IN_PLAY",
-            score=Score(home=1, away=0),
-            competition="Competition A",
-        )
-        tracker.active_matches["1"] = active_match
+        # Add test matches
+        match1 = MagicMock(spec=Match)
+        match1.id = "1"
+        match1.status = MatchStatus.SCHEDULED
+        match1.start_time = now + timedelta(hours=2)
 
-        # Upcoming match starting soon
-        upcoming_soon = Match(
-            id="2",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() + timedelta(minutes=15),
-            status="SCHEDULED",
-            score=Score(home=None, away=None),
-            competition="Competition A",
-        )
-        tracker.upcoming_matches["2"] = upcoming_soon
+        match2 = MagicMock(spec=Match)
+        match2.id = "2"
+        match2.status = MatchStatus.SCHEDULED
+        match2.start_time = now + timedelta(hours=25)  # Outside 24h window
 
-        # Upcoming match not starting soon
-        upcoming_later = Match(
-            id="3",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() + timedelta(hours=2),
-            status="SCHEDULED",
-            score=Score(home=None, away=None),
-            competition="Competition A",
-        )
-        tracker.upcoming_matches["3"] = upcoming_later
+        match3 = MagicMock(spec=Match)
+        match3.id = "3"
+        match3.status = MatchStatus.TIMED
+        match3.start_time = now + timedelta(hours=12)
 
-        # Recent match
-        recent_match = Match(
-            id="4",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() - timedelta(days=1),
-            status="FINISHED",
-            score=Score(home=2, away=1),
-            competition="Competition A",
-        )
-        tracker.recent_matches["4"] = recent_match
+        match4 = MagicMock(spec=Match)
+        match4.id = "4"
+        match4.status = MatchStatus.IN_PLAY  # Not upcoming
+        match4.start_time = now - timedelta(hours=1)
 
-        # Get matches to monitor
-        matches_to_monitor = tracker.get_matches_to_monitor()
+        match_tracker.matches = {
+            "1": match1,
+            "2": match2,
+            "3": match3,
+            "4": match4,
+        }
 
-        # Verify results
-        assert len(matches_to_monitor) == 2
-        match_ids = [m.id for m in matches_to_monitor]
-        assert "1" in match_ids  # Active match
-        assert "2" in match_ids  # Upcoming soon
-        assert "3" not in match_ids  # Not starting soon
-        assert "4" not in match_ids  # Recent match
+        # Get upcoming matches (24h window)
+        upcoming = match_tracker.get_upcoming_matches(hours=24)
 
-    def test_clean_old_matches(self, tracker):
-        """Test clean_old_matches method."""
-        # Add old and recent matches
-        home_team = Team(id="1", name="Team A")
-        away_team = Team(id="2", name="Team B")
+        assert len(upcoming) == 2
+        assert match1 in upcoming
+        assert match3 in upcoming
 
-        # Old match (beyond retention period)
+    def test_update_match_status(self, match_tracker, mock_api_client):
+        """Test updating match status."""
+        # Add a test match
+        home_team = Team(id="123", name="Home Team")
+        away_team = Team(id="456", name="Away Team")
+        old_score = Score(home=1, away=0)
         old_match = Match(
-            id="1",
+            id="123",
             home_team=home_team,
             away_team=away_team,
-            start_time=datetime.now() - timedelta(days=10),
-            status="FINISHED",
-            score=Score(home=2, away=1),
-            competition="Competition A",
+            start_time=datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=old_score
         )
-        tracker.recent_matches["1"] = old_match
 
-        # Recent match (within retention period)
-        recent_match = Match(
-            id="2",
+        match_tracker.matches["123"] = old_match
+
+        # Mock API response
+        mock_response = {"response": [{"fixture": {"id": 123}}]}
+        mock_api_client.get_match_details.return_value = mock_response
+
+        # Create updated match
+        new_score = Score(home=2, away=0)
+        updated_match = Match(
+            id="123",
             home_team=home_team,
             away_team=away_team,
-            start_time=datetime.now() - timedelta(days=3),
-            status="FINISHED",
-            score=Score(home=1, away=1),
-            competition="Competition A",
+            start_time=datetime.now(),
+            status=MatchStatus.FINISHED,  # Status changed
+            score=new_score  # Score changed
         )
-        tracker.recent_matches["2"] = recent_match
 
-        # Clean old matches
-        removed_count = tracker.clean_old_matches()
+        match_tracker.parser.parse_matches.return_value = [updated_match]
 
-        # Verify results
-        assert removed_count == 1
-        assert "1" not in tracker.recent_matches
-        assert "2" in tracker.recent_matches
+        # Call method
+        with patch.object(match_tracker, 'save_matches') as mock_save:
+            result = match_tracker.update_match_status("123")
 
-    def test_save_and_load_matches(self, tracker, temp_storage_path):
+        # Verify API call
+        mock_api_client.get_match_details.assert_called_once_with("123")
+
+        # Verify parser call
+        match_tracker.parser.parse_matches.assert_called_once_with(mock_response)
+
+        # Verify result
+        assert result == updated_match
+        assert match_tracker.matches["123"] == updated_match
+
+    def test_update_match_status_unknown_match(self, match_tracker, mock_api_client):
+        """Test updating status of unknown match."""
+        result = match_tracker.update_match_status("unknown")
+        assert result is None
+        mock_api_client.get_match_details.assert_not_called()
+
+    def test_update_active_matches(self, match_tracker):
+        """Test updating all active matches."""
+        # Mock get_active_matches
+        match1 = MagicMock(spec=Match)
+        match1.id = "1"
+        match2 = MagicMock(spec=Match)
+        match2.id = "2"
+
+        with patch.object(match_tracker, "get_active_matches", return_value=[match1, match2]):
+            with patch.object(match_tracker, "update_match_status") as mock_update:
+                mock_update.side_effect = [match1, match2]
+
+                # Call method
+                result = match_tracker.update_active_matches()
+
+                # Verify update calls
+                assert mock_update.call_count == 2
+                mock_update.assert_any_call("1")
+                mock_update.assert_any_call("2")
+
+                # Verify result
+                assert len(result) == 2
+                assert match1 in result
+                assert match2 in result
+
+    def test_clean_old_matches(self, match_tracker):
+        """Test cleaning old matches."""
+        now = datetime.now()
+
+        # Add test matches
+        match1 = MagicMock(spec=Match)
+        match1.id = "1"
+        match1.status = MatchStatus.FINISHED
+        match1.start_time = now - timedelta(days=10)  # Old match
+
+        match2 = MagicMock(spec=Match)
+        match2.id = "2"
+        match2.status = MatchStatus.FINISHED
+        match2.start_time = now - timedelta(days=3)  # Recent match
+
+        match3 = MagicMock(spec=Match)
+        match3.id = "3"
+        match3.status = MatchStatus.SCHEDULED
+        match3.start_time = now - timedelta(days=10)  # Old but not finished
+
+        match_tracker.matches = {
+            "1": match1,
+            "2": match2,
+            "3": match3,
+        }
+
+        # Clean old matches (7 days)
+        with patch.object(match_tracker, "save_matches") as mock_save:
+            removed = match_tracker.clean_old_matches(days=7)
+
+            # Verify result
+            assert removed == 1
+            assert "1" not in match_tracker.matches
+            assert "2" in match_tracker.matches
+            assert "3" in match_tracker.matches
+            mock_save.assert_called_once()
+
+    def test_save_and_load_matches(self, match_tracker, temp_storage_path):
         """Test saving and loading matches."""
-        # Add matches to collections
-        home_team = Team(id="1", name="Team A")
-        away_team = Team(id="2", name="Team B")
+        # Create test matches
+        from football_match_notification_service.models import Team, Score, Match, MatchStatus
+        
+        home_team = Team(id="123", name="Home Team")
+        away_team = Team(id="456", name="Away Team")
+        score = Score(home=2, away=1)
+        start_time = datetime.now()
 
-        upcoming_match = Match(
-            id="1",
+        match = Match(
+            id="789",
             home_team=home_team,
             away_team=away_team,
-            start_time=datetime.now() + timedelta(days=1),
-            status="SCHEDULED",
-            score=Score(home=None, away=None),
-            competition="Competition A",
+            start_time=start_time,
+            status=MatchStatus.FINISHED,
+            score=score,
+            competition="Test League",
         )
-        tracker.upcoming_matches["1"] = upcoming_match
 
-        active_match = Match(
-            id="2",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() - timedelta(minutes=30),
-            status="IN_PLAY",
-            score=Score(home=1, away=0),
-            competition="Competition A",
+        # Save match
+        match_tracker.matches = {"789": match}
+        match_tracker.save_matches()
+
+        # Verify file was created
+        matches_file = temp_storage_path / "matches.json"
+        assert matches_file.exists()
+
+        # Create a new tracker to load matches
+        new_tracker = MatchTracker(
+            api_client=match_tracker.api_client,
+            config=match_tracker.config,
+            storage_path=temp_storage_path,
         )
-        tracker.active_matches["2"] = active_match
-
-        recent_match = Match(
-            id="3",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() - timedelta(days=1),
-            status="FINISHED",
-            score=Score(home=2, away=1),
-            competition="Competition A",
-        )
-        tracker.recent_matches["3"] = recent_match
-
-        # Save matches
-        tracker._save_matches()
-
-        # Verify files were created
-        assert os.path.exists(os.path.join(temp_storage_path, "upcoming_matches.json"))
-        assert os.path.exists(os.path.join(temp_storage_path, "active_matches.json"))
-        assert os.path.exists(os.path.join(temp_storage_path, "recent_matches.json"))
-
-        # Clear collections
-        tracker.upcoming_matches = {}
-        tracker.active_matches = {}
-        tracker.recent_matches = {}
-
-        # Load matches
-        tracker._load_matches()
 
         # Verify matches were loaded
-        assert "1" in tracker.upcoming_matches
-        assert "2" in tracker.active_matches
-        assert "3" in tracker.recent_matches
-
-    def test_get_match(self, tracker):
-        """Test get_match method."""
-        # Add matches to collections
-        home_team = Team(id="1", name="Team A")
-        away_team = Team(id="2", name="Team B")
-
-        upcoming_match = Match(
-            id="1",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() + timedelta(days=1),
-            status="SCHEDULED",
-            score=Score(home=None, away=None),
-            competition="Competition A",
-        )
-        tracker.upcoming_matches["1"] = upcoming_match
-
-        active_match = Match(
-            id="2",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() - timedelta(minutes=30),
-            status="IN_PLAY",
-            score=Score(home=1, away=0),
-            competition="Competition A",
-        )
-        tracker.active_matches["2"] = active_match
-
-        recent_match = Match(
-            id="3",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() - timedelta(days=1),
-            status="FINISHED",
-            score=Score(home=2, away=1),
-            competition="Competition A",
-        )
-        tracker.recent_matches["3"] = recent_match
-
-        # Get matches
-        match1 = tracker.get_match("1")
-        match2 = tracker.get_match("2")
-        match3 = tracker.get_match("3")
-        match4 = tracker.get_match("4")
-
-        # Verify results
-        assert match1 == upcoming_match
-        assert match2 == active_match
-        assert match3 == recent_match
-        assert match4 is None
-
-    def test_get_all_matches(self, tracker):
-        """Test get_all_matches method."""
-        # Add matches to collections
-        home_team = Team(id="1", name="Team A")
-        away_team = Team(id="2", name="Team B")
-
-        upcoming_match = Match(
-            id="1",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() + timedelta(days=1),
-            status="SCHEDULED",
-            score=Score(home=None, away=None),
-            competition="Competition A",
-        )
-        tracker.upcoming_matches["1"] = upcoming_match
-
-        active_match = Match(
-            id="2",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() - timedelta(minutes=30),
-            status="IN_PLAY",
-            score=Score(home=1, away=0),
-            competition="Competition A",
-        )
-        tracker.active_matches["2"] = active_match
-
-        recent_match = Match(
-            id="3",
-            home_team=home_team,
-            away_team=away_team,
-            start_time=datetime.now() - timedelta(days=1),
-            status="FINISHED",
-            score=Score(home=2, away=1),
-            competition="Competition A",
-        )
-        tracker.recent_matches["3"] = recent_match
-
-        # Get all matches
-        all_matches = tracker.get_all_matches()
-
-        # Verify results
-        assert len(all_matches["upcoming"]) == 1
-        assert len(all_matches["active"]) == 1
-        assert len(all_matches["recent"]) == 1
-        assert all_matches["upcoming"][0] == upcoming_match
-        assert all_matches["active"][0] == active_match
-        assert all_matches["recent"][0] == recent_match
-
-
-@patch("football_match_notification_service.match_tracker.MatchTracker")
-def test_get_match_tracker(mock_tracker_class):
-    """Test get_match_tracker function."""
-    # First call should create a new instance
-    mock_api_client = MagicMock()
-    mock_config = MagicMock()
-
-    tracker = get_match_tracker(
-        api_client=mock_api_client,
-        config=mock_config,
-        storage_path="/tmp/test",
-    )
-
-    # Verify instance was created with correct parameters
-    mock_tracker_class.assert_called_once_with(
-        api_client=mock_api_client,
-        config=mock_config,
-        storage_path="/tmp/test",
-    )
-
-    # Reset mock
-    mock_tracker_class.reset_mock()
-
-    # Second call should return the same instance
-    tracker2 = get_match_tracker()
-
-    # Verify no new instance was created
-    mock_tracker_class.assert_not_called()
-    assert tracker == tracker2
+        assert "789" in new_tracker.matches
+        loaded_match = new_tracker.matches["789"]
+        assert loaded_match.id == "789"
+        assert loaded_match.home_team.id == "123"
+        assert loaded_match.home_team.name == "Home Team"
+        assert loaded_match.away_team.id == "456"
+        assert loaded_match.away_team.name == "Away Team"
+        assert loaded_match.status == MatchStatus.FINISHED
+        assert loaded_match.score.home == 2
+        assert loaded_match.score.away == 1
+        assert loaded_match.competition == "Test League"
