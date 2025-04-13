@@ -52,12 +52,11 @@ A service that monitors football matches for specific teams and sends notificati
   - Raspberry Pi
 
 ### Data Source
-- Start with free football data API options:
-  - Football-Data.org (primary consideration)
-  - Explore public RSS feeds or free data sources specific to target leagues
-- Design with flexibility to switch to paid APIs in the future if needed:
-  - API-Football (RapidAPI)
-  - SportMonks
+- Use API-Football.com (via RapidAPI) as the primary data source
+  - Provides comprehensive coverage of football leagues worldwide
+  - Offers detailed match events and statistics
+  - Supports real-time updates during matches
+- Implement proper API key management and rate limiting compliance
 
 ### System Architecture
 1. **Scheduler Component**

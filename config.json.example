@@ -1,23 +1,23 @@
 {
   "teams": [
     {
-      "name": "Arsenal FC",
-      "short_name": "Arsenal",
-      "league": "Premier League",
-      "team_id": "57",
-      "country": "England"
+      "name": "Dynamo Dresden",
+      "short_name": "Dresden",
+      "league": "3. Liga",
+      "team_id": "1269",
+      "country": "Germany"
     },
     {
-      "name": "FC Barcelona",
-      "short_name": "Barcelona",
-      "league": "La Liga",
-      "team_id": "81",
-      "country": "Spain"
+      "name": "Forres Mechanics FC",
+      "short_name": "Forres",
+      "league": "Highland League",
+      "team_id": "7364",
+      "country": "Scotland"
     }
   ],
   "api_settings": {
-    "api_key": "YOUR_API_KEY_HERE",
-    "base_url": "https://api.football-data.org/v4",
+    "api_key": "YOUR_RAPIDAPI_KEY_HERE",
+    "base_url": "https://api-football-v1.p.rapidapi.com/v3",
     "request_timeout": 30
   },
   "notification_preferences": {

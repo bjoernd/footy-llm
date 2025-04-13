@@ -139,22 +139,22 @@ For each commit, provide:
 Please implement this module with proper error handling and tests, ensuring it integrates well with the Hatch project structure from the previous prompts.
 ```
 
-## Prompt 4: API Client Interface with Git Workflow
+## Prompt 4: API Client Interface for API-Football with Git Workflow
 
 ```
-For my Football Match Notification Service, I need to create an API client interface that will communicate with football data APIs. Please implement this with a clear Git workflow.
+For my Football Match Notification Service, I need to create an API client interface that will communicate with the API-Football.com API via RapidAPI. Please implement this with a clear Git workflow.
 
 Requirements:
 1. Create an abstract base class for API clients
-2. Implement a concrete client for Football-Data.org API
+2. Implement a concrete client for API-Football.com API
 3. Include methods for:
-   - Authenticating with the API
+   - Authenticating with the API using RapidAPI key
    - Making GET requests with proper error handling
    - Handling rate limiting
    - Processing API responses
 
 4. The client should support:
-   - Adding authentication headers
+   - Adding authentication headers for RapidAPI
    - Setting request timeouts
    - Handling HTTP errors
    - Parsing JSON responses
@@ -163,7 +163,7 @@ Requirements:
 
 6. Implement this with the following Git commit sequence:
    - Commit 1: Create abstract API client base class
-   - Commit 2: Implement Football-Data.org API client
+   - Commit 2: Implement API-Football client
    - Commit 3: Add authentication and request handling
    - Commit 4: Implement response processing
    - Commit 5: Write unit tests with mock responses
@@ -175,7 +175,8 @@ For each commit, provide:
 - Verification steps to ensure the project still builds and passes tests
 
 7. After completing each commit, update the implementation checklist in specs/todo.md:
-   - Mark completed tasks as [x] instead of [ ]
+   - Mark completed tasks as [x] instead of [ ] and add the completion timestamp in format YYYY-MM-DD HH:MM:SS
+     Example: "[x] Initialize Git repository (2025-04-10 21:15:30)"
    - Add any additional tasks discovered during implementation
    - Commit the updated checklist with a message like "Update implementation checklist"
 
@@ -224,10 +225,10 @@ For each commit, provide:
 Please implement this functionality with proper error handling and tests.
 ```
 
-## Prompt 6: Data Models and Parsing with Git Workflow
+## Prompt 6: Data Models and Parsing for API-Football with Git Workflow
 
 ```
-For my Football Match Notification Service, I need to create data models and parsing utilities for football match data. Please implement this with a clear Git workflow.
+For my Football Match Notification Service, I need to create data models and parsing utilities for football match data from API-Football.com. Please implement this with a clear Git workflow.
 
 Requirements:
 1. Create the following data models:
@@ -236,7 +237,7 @@ Requirements:
    - Event (id, match_id, type, minute, team_id, player_name, description)
 
 2. Implement a data parser that can:
-   - Convert Football-Data.org API responses to these models
+   - Convert API-Football.com API responses to these models
    - Normalize data formats (dates, team names, etc.)
    - Extract relevant information from complex responses
 
@@ -258,27 +259,28 @@ For each commit, provide:
 - Verification steps to ensure the project still builds and passes tests
 
 6. After completing each commit, update the implementation checklist in specs/todo.md:
-   - Mark completed tasks as [x] instead of [ ]
+   - Mark completed tasks as [x] instead of [ ] and add the completion timestamp in format YYYY-MM-DD HH:MM:SS
+     Example: "[x] Initialize Git repository (2025-04-10 21:15:30)"
    - Add any additional tasks discovered during implementation
    - Commit the updated checklist with a message like "Update implementation checklist"
 
 Please implement these models and parsing utilities with proper error handling and tests.
 ```
 
-## Prompt 8: Match Discovery and Tracking with Git Workflow
+## Prompt 8: Match Discovery and Tracking with API-Football and Git Workflow
 
 ```
-For my Football Match Notification Service, I need to implement match discovery and tracking functionality. Please implement this with a clear Git workflow.
+For my Football Match Notification Service, I need to implement match discovery and tracking functionality using the API-Football.com API. Please implement this with a clear Git workflow.
 
 Requirements:
 1. Create a match_tracker.py module that can:
-   - Discover upcoming matches for configured teams
+   - Discover upcoming matches for configured teams using API-Football
    - Track the status of discovered matches
    - Determine when to start/stop polling for a match
    - Store match information for later reference
 
 2. The match tracker should:
-   - Use the API client to fetch match schedules
+   - Use the API client to fetch match schedules from API-Football
    - Filter matches for teams of interest
    - Detect new matches within the configured timeframe (e.g., 3 days)
    - Track match status changes (scheduled, in-play, finished)
@@ -291,13 +293,26 @@ Requirements:
 4. Write unit tests for the match tracker
 
 5. Implement this with the following Git commit sequence:
-   - Commit 1: Create match tracker structure
+   - Commit 1: Create match tracker structure for API-Football
    - Commit 2: Implement match discovery functionality
    - Commit 3: Add match status tracking
    - Commit 4: Implement match storage
    - Commit 5: Write unit tests for match tracking
 
 For each commit, provide:
+- The exact Git commands
+- A clear commit message
+- An explanation of what's being changed and why
+- Verification steps to ensure the project still builds and passes tests
+
+6. After completing each commit, update the implementation checklist in specs/todo.md:
+   - Mark completed tasks as [x] instead of [ ] and add the completion timestamp in format YYYY-MM-DD HH:MM:SS
+     Example: "[x] Initialize Git repository (2025-04-10 21:15:30)"
+   - Add any additional tasks discovered during implementation
+   - Commit the updated checklist with a message like "Update implementation checklist"
+
+Please implement this module with proper error handling and tests.
+```
 - The exact Git commands
 - A clear commit message
 - An explanation of what's being changed and why
@@ -311,14 +326,14 @@ For each commit, provide:
 Please implement this module with proper error handling and tests.
 ```
 
-## Prompt 9: Event Detection with Git Workflow
+## Prompt 9: Event Detection with API-Football and Git Workflow
 
 ```
-For my Football Match Notification Service, I need to implement event detection logic that identifies key events during matches. Please implement this with a clear Git workflow.
+For my Football Match Notification Service, I need to implement event detection logic that identifies key events during matches using the API-Football.com API. Please implement this with a clear Git workflow.
 
 Requirements:
 1. Create an event_detector.py module that can:
-   - Compare current match state with previous state
+   - Compare current match state with previous state from API-Football
    - Detect the following events:
      * Match start
      * Goals
@@ -335,7 +350,7 @@ Requirements:
 3. Write unit tests for the event detector with various match state scenarios
 
 4. Implement this with the following Git commit sequence:
-   - Commit 1: Create event detector framework
+   - Commit 1: Create event detector framework for API-Football
    - Commit 2: Implement match start/end detection
    - Commit 3: Add goal detection logic
    - Commit 4: Implement half-time and statistics detection
@@ -348,7 +363,8 @@ For each commit, provide:
 - Verification steps to ensure the project still builds and passes tests
 
 5. After completing each commit, update the implementation checklist in specs/todo.md:
-   - Mark completed tasks as [x] instead of [ ]
+   - Mark completed tasks as [x] instead of [ ] and add the completion timestamp in format YYYY-MM-DD HH:MM:SS
+     Example: "[x] Initialize Git repository (2025-04-10 21:15:30)"
    - Add any additional tasks discovered during implementation
    - Commit the updated checklist with a message like "Update implementation checklist"
 
