@@ -2,273 +2,318 @@
 Tests for the event detector module.
 """
 
-import pytest
-from datetime import datetime, timedelta
+import datetime
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from football_match_notification_service.api_client import APIFootballClient
+from football_match_notification_service.event_detector import EventDetector
 from football_match_notification_service.models import (
     Event,
     EventType,
     Match,
-    Team,
-    Score,
     MatchStatus,
+    Score,
+    Team,
 )
-from football_match_notification_service.event_detector import EventDetector
 
 
-@pytest.fixture
-def teams():
-    """Create test teams."""
-    home_team = Team(
-        id="1",
-        name="Home Team",
-        short_name="HOME",
-        logo_url="https://example.com/home.png",
-        country="Country A",
-    )
+class TestEventDetector:
+    """Tests for the event detector."""
 
-    away_team = Team(
-        id="2",
-        name="Away Team",
-        short_name="AWAY",
-        logo_url="https://example.com/away.png",
-        country="Country B",
-    )
+    @pytest.fixture
+    def mock_api_client(self):
+        """Create a mock API client."""
+        return MagicMock(spec=APIFootballClient)
 
-    return home_team, away_team
+    @pytest.fixture
+    def event_detector(self, mock_api_client):
+        """Create an event detector with mock dependencies."""
+        detector = EventDetector(api_client=mock_api_client)
+        detector.parser.parse_events = MagicMock(return_value=[])
+        return detector
 
+    @pytest.fixture
+    def home_team(self):
+        """Create a home team fixture."""
+        return Team(id="123", name="Home Team")
 
-@pytest.fixture
-def match_factory(teams):
-    """Create a factory for match objects with different states."""
-    home_team, away_team = teams
-    start_time = datetime.now()
+    @pytest.fixture
+    def away_team(self):
+        """Create an away team fixture."""
+        return Team(id="456", name="Away Team")
 
-    def _create_match(status="SCHEDULED", minute=0, home_score=0, away_score=0):
-        # Convert string status to MatchStatus enum
-        match_status = status
-        if isinstance(status, str):
-            try:
-                match_status = MatchStatus(status)
-            except ValueError:
-                match_status = MatchStatus.UNKNOWN
-
-        return Match(
-            id="match123",
+    def test_detect_match_start(self, event_detector, home_team, away_team):
+        """Test detecting match start."""
+        # Create a match that has just started
+        match = Match(
+            id="789",
             home_team=home_team,
             away_team=away_team,
-            start_time=start_time,
-            status=match_status,
-            score=Score(home=home_score, away=away_score),
-            competition="Test League",
-            minute=minute,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=Score(home=0, away=0),
         )
 
-    return _create_match
+        # Detect events
+        events = event_detector.detect_events(match)
 
+        # Verify events
+        assert len(events) == 1
+        assert events[0].type == EventType.MATCH_START
+        assert events[0].match_id == "789"
 
-@pytest.fixture
-def event_detector():
-    """Create an event detector instance."""
-    return EventDetector()
+        # Detect events again (should not detect start again)
+        events = event_detector.detect_events(match)
+        assert len(events) == 0
 
+    def test_detect_half_time(self, event_detector, home_team, away_team):
+        """Test detecting half-time."""
+        # Create a match that is in play
+        in_play_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=Score(home=1, away=0),
+        )
 
-def test_detect_match_start(event_detector, match_factory):
-    """Test detection of match start event."""
-    # Create a match that has just started
-    match = match_factory(status="IN_PLAY", minute=1)
+        # First detect the in-play match
+        event_detector.detect_events(in_play_match)
 
-    # Detect events
-    events = event_detector.detect_events(match)
+        # Now create a match at half-time
+        half_time_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.HALF_TIME,
+            score=Score(home=1, away=0),
+        )
 
-    # Verify a match start event was detected
-    assert len(events) == 1
-    assert events[0].type == EventType.MATCH_START
-    assert events[0].match_id == match.id
-    assert "Match started" in events[0].description
+        # Detect events
+        events = event_detector.detect_events(half_time_match)
 
+        # Verify events
+        assert len(events) == 1
+        assert events[0].type == EventType.HALF_TIME
+        assert events[0].match_id == "789"
 
-def test_detect_match_start_only_once(event_detector, match_factory):
-    """Test that match start is only detected once."""
-    # Create a match that has just started
-    match1 = match_factory(status="IN_PLAY", minute=1)
+    def test_detect_match_end(self, event_detector, home_team, away_team):
+        """Test detecting match end."""
+        # Create a match that is in play
+        in_play_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=Score(home=2, away=1),
+        )
 
-    # Detect events - should find match start
-    events1 = event_detector.detect_events(match1)
-    assert len(events1) == 1
-    assert events1[0].type == EventType.MATCH_START
+        # First detect the in-play match
+        event_detector.detect_events(in_play_match)
 
-    # Update the match but keep it in play
-    match2 = match_factory(status="IN_PLAY", minute=5)
+        # Now create a match that has finished
+        finished_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.FINISHED,
+            score=Score(home=2, away=1),
+        )
 
-    # Detect events again - should not find another match start
-    events2 = event_detector.detect_events(match2)
-    assert len(events2) == 0
+        # Detect events
+        events = event_detector.detect_events(finished_match)
 
+        # Verify events
+        assert len(events) == 1
+        assert events[0].type == EventType.MATCH_END
+        assert events[0].match_id == "789"
 
-def test_detect_half_time(event_detector, match_factory):
-    """Test detection of half-time event."""
-    # Reset the detector to start fresh
-    event_detector.reset()
+    def test_detect_score_change(self, event_detector, home_team, away_team, mock_api_client):
+        """Test detecting score changes."""
+        # Create a match with initial score
+        initial_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=Score(home=0, away=0),
+        )
 
-    # Create a match that is in play
-    match1 = match_factory(status="IN_PLAY", minute=44)
+        # First detect the initial match
+        event_detector.detect_events(initial_match)
 
-    # First detection - no half time yet
-    event_detector.detect_events(match1)
+        # Now create a match with updated score
+        updated_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=Score(home=1, away=0),
+        )
 
-    # Update the match to half-time - use the enum directly
-    match2 = match_factory(status=MatchStatus.HALF_TIME, minute=45)
+        # Mock API response for events
+        goal_event = Event(
+            id="789_45_GOAL_123",
+            match_id="789",
+            type=EventType.GOAL,
+            minute=45,
+            team_id="123",
+            player_name="Goal Scorer",
+            description="Goal by Goal Scorer",
+        )
+        event_detector.parser.parse_events.return_value = [goal_event]
 
-    # Debug the match objects
-    print(f"Match1 status: {match1.status}, Match2 status: {match2.status}")
+        # Detect events
+        events = event_detector.detect_events(updated_match)
 
-    # Detect events again - should find half-time
-    events = event_detector.detect_events(match2)
+        # Verify API call
+        mock_api_client.get_fixtures_events.assert_called_once_with("789")
 
-    # Debug output
-    print(f"Events detected: {events}")
+        # Verify events
+        assert len(events) == 1
+        assert events[0].type == EventType.GOAL
+        assert events[0].match_id == "789"
+        assert events[0].team_id == "123"
+        assert events[0].player_name == "Goal Scorer"
 
-    assert len(events) == 1
-    assert events[0].type == EventType.HALF_TIME
-    assert events[0].match_id == match2.id
-    assert "Half-time" in events[0].description
+    def test_detect_multiple_events(self, event_detector, home_team, away_team):
+        """Test detecting multiple events in sequence."""
+        # Create a scheduled match
+        scheduled_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.SCHEDULED,
+            score=Score(home=0, away=0),
+        )
 
+        # First detect the scheduled match (no events)
+        events = event_detector.detect_events(scheduled_match)
+        assert len(events) == 0
 
-def test_detect_match_end(event_detector, match_factory):
-    """Test detection of match end event."""
-    # Reset the detector to start fresh
-    event_detector.reset()
+        # Match starts
+        in_play_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=Score(home=0, away=0),
+        )
+        events = event_detector.detect_events(in_play_match)
+        assert len(events) == 1
+        assert events[0].type == EventType.MATCH_START
 
-    # Create a match that is in play
-    match1 = match_factory(status="IN_PLAY", minute=89)
+        # Half-time
+        half_time_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.HALF_TIME,
+            score=Score(home=0, away=0),
+        )
+        events = event_detector.detect_events(half_time_match)
+        assert len(events) == 1
+        assert events[0].type == EventType.HALF_TIME
 
-    # First detection - no match end yet
-    event_detector.detect_events(match1)
+        # Second half
+        second_half_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=Score(home=0, away=0),
+        )
+        events = event_detector.detect_events(second_half_match)
+        assert len(events) == 0  # No new events
 
-    # Update the match to finished
-    match2 = match_factory(status="FINISHED", minute=90)
+        # Match ends
+        finished_match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.FINISHED,
+            score=Score(home=0, away=0),
+        )
+        events = event_detector.detect_events(finished_match)
+        assert len(events) == 1
+        assert events[0].type == EventType.MATCH_END
 
-    # Detect events again - should find match end
-    events = event_detector.detect_events(match2)
+    def test_clear_match_state(self, event_detector, home_team, away_team):
+        """Test clearing match state."""
+        # Create a match
+        match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=Score(home=0, away=0),
+        )
 
-    # Debug output
-    print(f"Events detected: {events}")
+        # Detect events to populate state
+        event_detector.detect_events(match)
+        assert "789" in event_detector._previous_states
 
-    assert len(events) == 1
-    assert events[0].type == EventType.MATCH_END
-    assert events[0].match_id == match2.id
-    assert "Match ended" in events[0].description
+        # Clear state
+        event_detector.clear_match_state("789")
+        assert "789" not in event_detector._previous_states
 
+    def test_clear_old_matches(self, event_detector, home_team, away_team):
+        """Test clearing old matches."""
+        # Create matches with different statuses
+        in_play_match = Match(
+            id="1",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=Score(home=0, away=0),
+        )
 
-def test_detect_home_goal(event_detector, match_factory):
-    """Test detection of a goal by the home team."""
-    # Create a match with no goals
-    match1 = match_factory(status="IN_PLAY", minute=10, home_score=0, away_score=0)
+        finished_match = Match(
+            id="2",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.FINISHED,
+            score=Score(home=1, away=0),
+        )
 
-    # First detection - no goals yet
-    event_detector.detect_events(match1)
+        cancelled_match = Match(
+            id="3",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.CANCELLED,
+            score=Score(home=0, away=0),
+        )
 
-    # Update the match with a home goal
-    match2 = match_factory(status="IN_PLAY", minute=15, home_score=1, away_score=0)
+        # Populate state
+        event_detector.detect_events(in_play_match)
+        event_detector.detect_events(finished_match)
+        event_detector.detect_events(cancelled_match)
 
-    # Detect events again - should find a goal
-    events = event_detector.detect_events(match2)
+        assert "1" in event_detector._previous_states
+        assert "2" in event_detector._previous_states
+        assert "3" in event_detector._previous_states
 
-    assert len(events) == 1
-    assert events[0].type == EventType.GOAL
-    assert events[0].match_id == match2.id
-    assert events[0].team_id == match2.home_team.id
-    assert "GOAL" in events[0].description
-    assert "1-0" in events[0].description
+        # Clear old matches
+        event_detector.clear_old_matches()
 
-
-def test_detect_away_goal(event_detector, match_factory):
-    """Test detection of a goal by the away team."""
-    # Create a match with no goals
-    match1 = match_factory(status="IN_PLAY", minute=20, home_score=0, away_score=0)
-
-    # First detection - no goals yet
-    event_detector.detect_events(match1)
-
-    # Update the match with an away goal
-    match2 = match_factory(status="IN_PLAY", minute=25, home_score=0, away_score=1)
-
-    # Detect events again - should find a goal
-    events = event_detector.detect_events(match2)
-
-    assert len(events) == 1
-    assert events[0].type == EventType.GOAL
-    assert events[0].match_id == match2.id
-    assert events[0].team_id == match2.away_team.id
-    assert "GOAL" in events[0].description
-    assert "0-1" in events[0].description
-
-
-def test_detect_multiple_goals(event_detector, match_factory):
-    """Test detection of multiple goals in one update."""
-    # Create a match with no goals
-    match1 = match_factory(status="IN_PLAY", minute=30, home_score=0, away_score=0)
-
-    # First detection - no goals yet
-    event_detector.detect_events(match1)
-
-    # Update the match with multiple goals
-    match2 = match_factory(status="IN_PLAY", minute=40, home_score=2, away_score=1)
-
-    # Detect events again - should find multiple goals
-    events = event_detector.detect_events(match2)
-
-    assert len(events) == 3
-
-    # Check that we have 2 home goals and 1 away goal
-    home_goals = [e for e in events if e.team_id == match2.home_team.id]
-    away_goals = [e for e in events if e.team_id == match2.away_team.id]
-
-    assert len(home_goals) == 2
-    assert len(away_goals) == 1
-
-
-def test_detect_goals_on_first_update(event_detector, match_factory):
-    """Test detection of goals when seeing a match for the first time."""
-    # Create a match with existing goals
-    match = match_factory(status="IN_PLAY", minute=30, home_score=2, away_score=1)
-
-    # Detect events - should find all existing goals
-    events = event_detector.detect_events(match)
-
-    assert len(events) == 4  # 2 home goals + 1 away goal + match start
-
-    # Check event types
-    event_types = [e.type for e in events]
-    assert EventType.MATCH_START in event_types
-    assert event_types.count(EventType.GOAL) == 3
-
-
-def test_reset_detector(event_detector, match_factory):
-    """Test resetting the event detector."""
-    # Create a match and detect events
-    match1 = match_factory(status="IN_PLAY", minute=10, home_score=1, away_score=0)
-    events1 = event_detector.detect_events(match1)
-    assert len(events1) > 0
-
-    # Reset the detector
-    event_detector.reset()
-
-    # The same match should generate events again after reset
-    events2 = event_detector.detect_events(match1)
-    assert len(events2) > 0
-
-
-def test_no_duplicate_events(event_detector, match_factory):
-    """Test that the same event is not detected multiple times."""
-    # Create a match with a goal
-    match = match_factory(status="IN_PLAY", minute=10, home_score=1, away_score=0)
-
-    # Detect events - should find match start and goal
-    events1 = event_detector.detect_events(match)
-    assert len(events1) > 0
-
-    # Detect events again with the same match state
-    events2 = event_detector.detect_events(match)
-    assert len(events2) == 0  # No new events should be detected
+        # Verify only active matches remain
+        assert "1" in event_detector._previous_states
+        assert "2" not in event_detector._previous_states
+        assert "3" not in event_detector._previous_states
