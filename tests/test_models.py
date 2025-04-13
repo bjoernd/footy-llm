@@ -1,9 +1,9 @@
 """
-Tests for data models.
+Tests for the data models module.
 """
 
 import datetime
-import unittest
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -17,409 +17,420 @@ from football_match_notification_service.models import (
 )
 
 
-class TestTeam(unittest.TestCase):
-    """Test cases for Team model."""
+class TestTeam:
+    """Tests for the Team model."""
 
-    def test_valid_team(self):
-        """Test creating a valid team."""
-        team = Team(id="123", name="Test Team")
+    def test_team_creation(self):
+        """Test creating a team."""
+        team = Team(id="123", name="Test Team", short_name="TEST", logo_url="http://example.com/logo.png", country="Test Country")
         assert team.id == "123"
         assert team.name == "Test Team"
-        assert team.short_name == "Test Team"  # Default to name
+        assert team.short_name == "TEST"
+        assert team.logo_url == "http://example.com/logo.png"
+        assert team.country == "Test Country"
+
+    def test_team_from_api_football(self):
+        """Test creating a team from API-Football data."""
+        team_data = {
+            "id": 123,
+            "name": "Test Team",
+            "code": "TEST",
+            "logo": "http://example.com/logo.png",
+            "country": "Test Country"
+        }
+        team = Team.from_api_football(team_data)
+        assert team.id == "123"
+        assert team.name == "Test Team"
+        assert team.short_name == "TEST"
+        assert team.logo_url == "http://example.com/logo.png"
+        assert team.country == "Test Country"
+
+    def test_team_from_api_football_minimal(self):
+        """Test creating a team from minimal API-Football data."""
+        team_data = {
+            "id": 123,
+            "name": "Test Team"
+        }
+        team = Team.from_api_football(team_data)
+        assert team.id == "123"
+        assert team.name == "Test Team"
+        assert team.short_name is None
         assert team.logo_url is None
         assert team.country is None
 
-    def test_team_with_all_fields(self):
-        """Test creating a team with all fields."""
-        team = Team(
-            id="123",
-            name="Test Team",
-            short_name="TT",
-            logo_url="https://example.com/logo.png",
-            country="Test Country",
-        )
-        assert team.id == "123"
-        assert team.name == "Test Team"
-        assert team.short_name == "TT"
-        assert team.logo_url == "https://example.com/logo.png"
-        assert team.country == "Test Country"
-
-    def test_team_without_id(self):
-        """Test creating a team without ID."""
-        with pytest.raises(ValueError):
-            Team(id="", name="Test Team")
-
-    def test_team_without_name(self):
-        """Test creating a team without name."""
-        with pytest.raises(ValueError):
-            Team(id="123", name="")
+    def test_team_from_api_football_empty(self):
+        """Test creating a team from empty API-Football data."""
+        team_data = {}
+        team = Team.from_api_football(team_data)
+        assert team.id == ""
+        assert team.name == ""
+        assert team.short_name is None
+        assert team.logo_url is None
+        assert team.country is None
 
 
-class TestScore(unittest.TestCase):
-    """Test cases for Score model."""
+class TestScore:
+    """Tests for the Score model."""
 
-    def test_default_score(self):
-        """Test default score."""
-        score = Score()
-        assert score.home == 0
-        assert score.away == 0
-        assert str(score) == "0-0"
-
-    def test_custom_score(self):
-        """Test custom score."""
+    def test_score_creation(self):
+        """Test creating a score."""
         score = Score(home=2, away=1)
         assert score.home == 2
         assert score.away == 1
-        assert str(score) == "2-1"
+
+    def test_score_from_api_football(self):
+        """Test creating a score from API-Football data."""
+        score_data = {
+            "home": 2,
+            "away": 1
+        }
+        score = Score.from_api_football(score_data)
+        assert score.home == 2
+        assert score.away == 1
+
+    def test_score_from_api_football_empty(self):
+        """Test creating a score from empty API-Football data."""
+        score_data = {}
+        score = Score.from_api_football(score_data)
+        assert score.home == 0
+        assert score.away == 0
+
+    def test_score_from_api_football_none_values(self):
+        """Test creating a score from API-Football data with None values."""
+        score_data = {
+            "home": None,
+            "away": None
+        }
+        score = Score.from_api_football(score_data)
+        assert score.home == 0
+        assert score.away == 0
 
 
-class TestMatch(unittest.TestCase):
-    """Test cases for Match model."""
+class TestMatchStatus:
+    """Tests for the MatchStatus enum."""
 
-    def setUp(self):
-        """Set up test fixtures."""
-        self.home_team = Team(id="1", name="Home Team")
-        self.away_team = Team(id="2", name="Away Team")
-        self.start_time = datetime.datetime.now()
+    def test_match_status_from_api_football(self):
+        """Test converting API-Football status to MatchStatus."""
+        assert MatchStatus.from_api_football("NS") == MatchStatus.SCHEDULED
+        assert MatchStatus.from_api_football("1H") == MatchStatus.IN_PLAY
+        assert MatchStatus.from_api_football("HT") == MatchStatus.HALF_TIME
+        assert MatchStatus.from_api_football("2H") == MatchStatus.IN_PLAY
+        assert MatchStatus.from_api_football("FT") == MatchStatus.FINISHED
+        assert MatchStatus.from_api_football("AET") == MatchStatus.FINISHED
+        assert MatchStatus.from_api_football("PEN") == MatchStatus.FINISHED
+        assert MatchStatus.from_api_football("PST") == MatchStatus.POSTPONED
+        assert MatchStatus.from_api_football("CANC") == MatchStatus.CANCELLED
+        assert MatchStatus.from_api_football("UNKNOWN_STATUS") == MatchStatus.UNKNOWN
 
-    def test_valid_match(self):
-        """Test creating a valid match."""
+
+class TestEventType:
+    """Tests for the EventType enum."""
+
+    def test_event_type_from_api_football(self):
+        """Test converting API-Football event type to EventType."""
+        assert EventType.from_api_football("Goal") == EventType.GOAL
+        assert EventType.from_api_football("Card") == EventType.YELLOW_CARD
+        assert EventType.from_api_football("Subst") == EventType.SUBSTITUTION
+        assert EventType.from_api_football("Penalty missed") == EventType.PENALTY_MISSED
+        assert EventType.from_api_football("UNKNOWN_TYPE") == EventType.OTHER
+
+
+class TestMatch:
+    """Tests for the Match model."""
+
+    def test_match_creation(self):
+        """Test creating a match."""
+        home_team = Team(id="123", name="Home Team")
+        away_team = Team(id="456", name="Away Team")
+        score = Score(home=2, away=1)
+        start_time = datetime.datetime(2023, 1, 1, 15, 0)
+        
         match = Match(
-            id="123",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=start_time,
+            status=MatchStatus.FINISHED,
+            score=score,
+            competition="Test League",
+            venue="Test Stadium",
+            referee="Test Referee",
+            round="Round 1",
+            season="2023"
         )
-        assert match.id == "123"
-        assert match.home_team == self.home_team
-        assert match.away_team == self.away_team
-        assert match.start_time == self.start_time
-        assert match.status == MatchStatus.SCHEDULED
+        
+        assert match.id == "789"
+        assert match.home_team == home_team
+        assert match.away_team == away_team
+        assert match.start_time == start_time
+        assert match.status == MatchStatus.FINISHED
+        assert match.score == score
+        assert match.competition == "Test League"
+        assert match.venue == "Test Stadium"
+        assert match.referee == "Test Referee"
+        assert match.round == "Round 1"
+        assert match.season == "2023"
+
+    def test_match_from_api_football(self):
+        """Test creating a match from API-Football data."""
+        match_data = {
+            "fixture": {
+                "id": 789,
+                "date": "2023-01-01T15:00:00Z",
+                "status": {
+                    "short": "FT"
+                },
+                "venue": {
+                    "name": "Test Stadium"
+                },
+                "referee": "Test Referee"
+            },
+            "teams": {
+                "home": {
+                    "id": 123,
+                    "name": "Home Team"
+                },
+                "away": {
+                    "id": 456,
+                    "name": "Away Team"
+                }
+            },
+            "goals": {
+                "home": 2,
+                "away": 1
+            },
+            "league": {
+                "name": "Test League",
+                "round": "Round 1",
+                "season": 2023
+            }
+        }
+        
+        match = Match.from_api_football(match_data)
+        
+        assert match.id == "789"
+        assert match.home_team.id == "123"
+        assert match.home_team.name == "Home Team"
+        assert match.away_team.id == "456"
+        assert match.away_team.name == "Away Team"
+        assert match.start_time.isoformat() == "2023-01-01T15:00:00+00:00"
+        assert match.status == MatchStatus.FINISHED
+        assert match.score.home == 2
+        assert match.score.away == 1
+        assert match.competition == "Test League"
+        assert match.venue == "Test Stadium"
+        assert match.referee == "Test Referee"
+        assert match.round == "Round 1"
+        assert match.season == "2023"
+
+    def test_match_from_api_football_minimal(self):
+        """Test creating a match from minimal API-Football data."""
+        match_data = {
+            "fixture": {
+                "id": 789,
+                "status": {}
+            },
+            "teams": {
+                "home": {
+                    "id": 123,
+                    "name": "Home Team"
+                },
+                "away": {
+                    "id": 456,
+                    "name": "Away Team"
+                }
+            },
+            "goals": {},
+            "league": {}
+        }
+        
+        match = Match.from_api_football(match_data)
+        
+        assert match.id == "789"
+        assert match.home_team.id == "123"
+        assert match.home_team.name == "Home Team"
+        assert match.away_team.id == "456"
+        assert match.away_team.name == "Away Team"
+        assert match.status == MatchStatus.UNKNOWN
         assert match.score.home == 0
         assert match.score.away == 0
         assert match.competition is None
-        assert match.matchday is None
-        assert match.last_updated is None
-        assert match.events == []
-
-    def test_match_with_all_fields(self):
-        """Test creating a match with all fields."""
-        score = Score(home=2, away=1)
-        events = [
-            Event(id="1", match_id="123", type=EventType.GOAL),
-            Event(id="2", match_id="123", type=EventType.YELLOW_CARD),
-        ]
-        match = Match(
-            id="123",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.IN_PLAY,
-            score=score,
-            competition="Test League",
-            matchday=5,
-            last_updated=self.start_time,
-            events=events,
-        )
-        assert match.id == "123"
-        assert match.home_team == self.home_team
-        assert match.away_team == self.away_team
-        assert match.start_time == self.start_time
-        assert match.status == MatchStatus.IN_PLAY
-        assert match.score == score
-        assert match.competition == "Test League"
-        assert match.matchday == 5
-        assert match.last_updated == self.start_time
-        assert match.events == events
-
-    def test_match_without_id(self):
-        """Test creating a match without ID."""
-        with pytest.raises(ValueError):
-            Match(
-                id="",
-                home_team=self.home_team,
-                away_team=self.away_team,
-                start_time=self.start_time,
-            )
-
-    def test_match_with_invalid_home_team(self):
-        """Test creating a match with invalid home team."""
-        with pytest.raises(ValueError):
-            Match(
-                id="123",
-                home_team="Invalid Team",  # Not a Team object
-                away_team=self.away_team,
-                start_time=self.start_time,
-            )
-
-    def test_match_with_invalid_away_team(self):
-        """Test creating a match with invalid away team."""
-        with pytest.raises(ValueError):
-            Match(
-                id="123",
-                home_team=self.home_team,
-                away_team="Invalid Team",  # Not a Team object
-                start_time=self.start_time,
-            )
-
-    def test_match_with_invalid_start_time(self):
-        """Test creating a match with invalid start time."""
-        with pytest.raises(ValueError):
-            Match(
-                id="123",
-                home_team=self.home_team,
-                away_team=self.away_team,
-                start_time="2025-04-11",  # Not a datetime object
-            )
-
-    def test_match_with_string_status(self):
-        """Test creating a match with string status."""
-        match = Match(
-            id="123",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status="IN_PLAY",
-        )
-        assert match.status == MatchStatus.IN_PLAY
-
-    def test_match_with_invalid_status(self):
-        """Test creating a match with invalid status."""
-        match = Match(
-            id="123",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status="INVALID_STATUS",
-        )
-        assert match.status == MatchStatus.UNKNOWN
-
-    def test_match_with_invalid_score(self):
-        """Test creating a match with invalid score."""
-        with pytest.raises(ValueError):
-            Match(
-                id="123",
-                home_team=self.home_team,
-                away_team=self.away_team,
-                start_time=self.start_time,
-                score="2-1",  # Not a Score object
-            )
-
-    def test_is_live(self):
-        """Test is_live method."""
-        match1 = Match(
-            id="123",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.IN_PLAY,
-        )
-        match2 = Match(
-            id="124",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.PAUSED,
-        )
-        match3 = Match(
-            id="125",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.SCHEDULED,
-        )
-        assert match1.is_live() is True
-        assert match2.is_live() is True
-        assert match3.is_live() is False
-
-    def test_is_finished(self):
-        """Test is_finished method."""
-        match1 = Match(
-            id="123",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.FINISHED,
-        )
-        match2 = Match(
-            id="124",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.IN_PLAY,
-        )
-        assert match1.is_finished() is True
-        assert match2.is_finished() is False
-
-    def test_is_scheduled(self):
-        """Test is_scheduled method."""
-        match1 = Match(
-            id="123",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.SCHEDULED,
-        )
-        match2 = Match(
-            id="124",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.TIMED,
-        )
-        match3 = Match(
-            id="125",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.IN_PLAY,
-        )
-        assert match1.is_scheduled() is True
-        assert match2.is_scheduled() is True
-        assert match3.is_scheduled() is False
-
-    def test_is_postponed(self):
-        """Test is_postponed method."""
-        match1 = Match(
-            id="123",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.POSTPONED,
-        )
-        match2 = Match(
-            id="124",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.CANCELLED,
-        )
-        match3 = Match(
-            id="125",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.SUSPENDED,
-        )
-        match4 = Match(
-            id="126",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.SCHEDULED,
-        )
-        assert match1.is_postponed() is True
-        assert match2.is_postponed() is True
-        assert match3.is_postponed() is True
-        assert match4.is_postponed() is False
-
-    def test_string_representation(self):
-        """Test string representation."""
-        match = Match(
-            id="123",
-            home_team=self.home_team,
-            away_team=self.away_team,
-            start_time=self.start_time,
-            status=MatchStatus.IN_PLAY,
-            score=Score(home=2, away=1),
-        )
-        assert str(match) == "Home Team 2-1 Away Team (IN_PLAY)"
+        assert match.venue is None
+        assert match.referee is None
+        assert match.round is None
+        assert match.season is None
 
 
-class TestEvent(unittest.TestCase):
-    """Test cases for Event model."""
+class TestEvent:
+    """Tests for the Event model."""
 
-    def test_valid_event(self):
-        """Test creating a valid event."""
-        event = Event(id="123", match_id="456", type=EventType.GOAL)
-        assert event.id == "123"
-        assert event.match_id == "456"
-        assert event.type == EventType.GOAL
-        assert event.minute is None
-        assert event.team_id is None
-        assert event.player_name is None
-        assert event.description is None
-        assert isinstance(event.timestamp, datetime.datetime)
-
-    def test_event_with_all_fields(self):
-        """Test creating an event with all fields."""
-        timestamp = datetime.datetime.now()
+    def test_event_creation(self):
+        """Test creating an event."""
         event = Event(
-            id="123",
-            match_id="456",
+            id="123_45_GOAL",
+            match_id="123",
             type=EventType.GOAL,
-            minute=30,
-            team_id="789",
+            minute=45,
+            team_id="456",
             player_name="Test Player",
-            description="Test Description",
-            timestamp=timestamp,
+            description="Goal scored by Test Player",
+            score_home=1,
+            score_away=0
         )
-        assert event.id == "123"
-        assert event.match_id == "456"
+        
+        assert event.id == "123_45_GOAL"
+        assert event.match_id == "123"
         assert event.type == EventType.GOAL
-        assert event.minute == 30
-        assert event.team_id == "789"
+        assert event.minute == 45
+        assert event.team_id == "456"
         assert event.player_name == "Test Player"
-        assert event.description == "Test Description"
-        assert event.timestamp == timestamp
+        assert event.description == "Goal scored by Test Player"
+        assert event.score_home == 1
+        assert event.score_away == 0
 
-    def test_event_without_id(self):
-        """Test creating an event without ID."""
-        with pytest.raises(ValueError):
-            Event(id="", match_id="456", type=EventType.GOAL)
-
-    def test_event_without_match_id(self):
-        """Test creating an event without match ID."""
-        with pytest.raises(ValueError):
-            Event(id="123", match_id="", type=EventType.GOAL)
-
-    def test_event_with_string_type(self):
-        """Test creating an event with string type."""
-        event = Event(id="123", match_id="456", type="GOAL")
+    def test_event_from_api_football(self):
+        """Test creating an event from API-Football data."""
+        event_data = {
+            "time": {
+                "elapsed": 45
+            },
+            "type": "Goal",
+            "detail": "Normal Goal",
+            "comments": "Great shot",
+            "team": {
+                "id": 456,
+                "name": "Test Team"
+            },
+            "player": {
+                "id": 789,
+                "name": "Test Player"
+            }
+        }
+        
+        event = Event.from_api_football(event_data, "123")
+        
+        assert event.id == "123_45_GOAL_456"
+        assert event.match_id == "123"
         assert event.type == EventType.GOAL
+        assert event.minute == 45
+        assert event.team_id == "456"
+        assert event.player_name == "Test Player"
+        assert event.description == "Test Player - Normal Goal - Great shot"
 
-    def test_event_with_invalid_type(self):
-        """Test creating an event with invalid type."""
-        event = Event(id="123", match_id="456", type="INVALID_TYPE")
-        assert event.type == EventType.OTHER
+    def test_event_from_api_football_card(self):
+        """Test creating a card event from API-Football data."""
+        # Yellow card
+        yellow_card_data = {
+            "time": {
+                "elapsed": 30
+            },
+            "type": "Card",
+            "detail": "Yellow Card",
+            "team": {
+                "id": 456
+            },
+            "player": {
+                "name": "Test Player"
+            }
+        }
+        
+        yellow_event = Event.from_api_football(yellow_card_data, "123")
+        assert yellow_event.type == EventType.YELLOW_CARD
+        
+        # Red card
+        red_card_data = {
+            "time": {
+                "elapsed": 60
+            },
+            "type": "Card",
+            "detail": "Red Card",
+            "team": {
+                "id": 456
+            },
+            "player": {
+                "name": "Test Player"
+            }
+        }
+        
+        red_event = Event.from_api_football(red_card_data, "123")
+        assert red_event.type == EventType.RED_CARD
 
-    def test_event_with_invalid_timestamp(self):
-        """Test creating an event with invalid timestamp."""
-        with pytest.raises(ValueError):
-            Event(
-                id="123",
-                match_id="456",
-                type=EventType.GOAL,
-                timestamp="2025-04-11",  # Not a datetime object
-            )
-
-    def test_string_representation_with_minute(self):
-        """Test string representation with minute."""
-        event = Event(
-            id="123",
-            match_id="456",
-            type=EventType.GOAL,
-            minute=30,
-            description="Test Description",
+    def test_create_match_start_event(self):
+        """Test creating a match start event."""
+        home_team = Team(id="123", name="Home Team")
+        away_team = Team(id="456", name="Away Team")
+        score = Score(home=0, away=0)
+        match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.IN_PLAY,
+            score=score
         )
-        assert str(event) == "30' - GOAL: Test Description"
+        
+        event = Event.create_match_start_event(match)
+        
+        assert event.id == "789_START"
+        assert event.match_id == "789"
+        assert event.type == EventType.MATCH_START
+        assert event.minute == 0
+        assert "Match started" in event.description
+        assert "Home Team" in event.description
+        assert "Away Team" in event.description
+        assert event.score_home == 0
+        assert event.score_away == 0
 
-    def test_string_representation_without_minute(self):
-        """Test string representation without minute."""
-        event = Event(
-            id="123",
-            match_id="456",
-            type=EventType.MATCH_START,
-            description="Test Description",
+    def test_create_match_end_event(self):
+        """Test creating a match end event."""
+        home_team = Team(id="123", name="Home Team")
+        away_team = Team(id="456", name="Away Team")
+        score = Score(home=2, away=1)
+        match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.FINISHED,
+            score=score
         )
-        assert str(event) == "MATCH_START: Test Description"
+        
+        event = Event.create_match_end_event(match)
+        
+        assert event.id == "789_END"
+        assert event.match_id == "789"
+        assert event.type == EventType.MATCH_END
+        assert event.minute == 90
+        assert "Match ended" in event.description
+        assert "Home Team" in event.description
+        assert "Away Team" in event.description
+        assert "2-1" in event.description
+        assert event.score_home == 2
+        assert event.score_away == 1
 
-    def test_string_representation_without_description(self):
-        """Test string representation without description."""
-        event = Event(
-            id="123",
-            match_id="456",
-            type=EventType.GOAL,
-            minute=30,
+    def test_create_half_time_event(self):
+        """Test creating a half-time event."""
+        home_team = Team(id="123", name="Home Team")
+        away_team = Team(id="456", name="Away Team")
+        score = Score(home=1, away=0)
+        match = Match(
+            id="789",
+            home_team=home_team,
+            away_team=away_team,
+            start_time=datetime.datetime.now(),
+            status=MatchStatus.HALF_TIME,
+            score=score
         )
-        assert str(event) == "30' - GOAL: "
+        
+        event = Event.create_half_time_event(match)
+        
+        assert event.id == "789_HALF_TIME"
+        assert event.match_id == "789"
+        assert event.type == EventType.HALF_TIME
+        assert event.minute == 45
+        assert "Half-time" in event.description
+        assert "Home Team" in event.description
+        assert "Away Team" in event.description
+        assert "1-0" in event.description
+        assert event.score_home == 1
+        assert event.score_away == 0

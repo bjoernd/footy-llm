@@ -2,7 +2,7 @@
 API Client module for Football Match Notification Service.
 
 This module provides an abstract base class for API clients and a concrete implementation
-for the Football-Data.org API.
+for the API-Football.com API via RapidAPI.
 """
 
 import abc
@@ -48,191 +48,221 @@ class APIClient(abc.ABC):
             config_manager: Configuration manager instance
         """
         self.config_manager = config_manager
-        self.base_url = self._get_base_url()
-        self.timeout = self._get_timeout()
 
     @abc.abstractmethod
-    def _get_base_url(self) -> str:
+    def get_matches_by_team(self, team_id: str, from_date: str, to_date: str) -> Dict:
         """
-        Get the base URL for API requests.
-
-        Returns:
-            str: Base URL for the API
-        """
-        pass
-
-    @abc.abstractmethod
-    def _get_timeout(self) -> int:
-        """
-        Get the timeout for API requests.
-
-        Returns:
-            int: Timeout in seconds
-        """
-        pass
-
-    @abc.abstractmethod
-    def _get_headers(self) -> Dict[str, str]:
-        """
-        Get headers for API requests.
-
-        Returns:
-            Dict[str, str]: Headers for API requests
-        """
-        pass
-
-    @abc.abstractmethod
-    def get_matches(
-        self,
-        team_id: Optional[str] = None,
-        date_from: Optional[str] = None,
-        date_to: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Get matches for a team within a date range.
+        Get matches for a specific team within a date range.
 
         Args:
-            team_id: Optional team ID to filter matches
-            date_from: Optional start date in ISO format (YYYY-MM-DD)
-            date_to: Optional end date in ISO format (YYYY-MM-DD)
+            team_id: Team identifier
+            from_date: Start date in format YYYY-MM-DD
+            to_date: End date in format YYYY-MM-DD
 
         Returns:
-            Dict[str, Any]: Match data
+            Dict containing match data
+
+        Raises:
+            APIClientError: If the API request fails
         """
         pass
 
     @abc.abstractmethod
-    def get_match_details(self, match_id: str) -> Dict[str, Any]:
+    def get_match_details(self, match_id: str) -> Dict:
         """
         Get detailed information for a specific match.
 
         Args:
-            match_id: Match ID
+            match_id: Match identifier
 
         Returns:
-            Dict[str, Any]: Match details
+            Dict containing match details
+
+        Raises:
+            APIClientError: If the API request fails
         """
         pass
 
-    def _make_request(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    @abc.abstractmethod
+    def get_live_matches(self) -> Dict:
         """
-        Make an API request.
-
-        Args:
-            endpoint: API endpoint
-            params: Optional query parameters
+        Get all currently live matches.
 
         Returns:
-            Dict[str, Any]: API response data
+            Dict containing live match data
+
+        Raises:
+            APIClientError: If the API request fails
+        """
+        pass
+
+
+class APIFootballClient(APIClient):
+    """Client for the API-Football.com API via RapidAPI."""
+
+    def __init__(self, config_manager: ConfigManager):
+        """
+        Initialize the API-Football client.
+
+        Args:
+            config_manager: Configuration manager instance
+        """
+        super().__init__(config_manager)
+        self.base_url = self.config_manager.get("api_settings.base_url")
+        self.api_key = self.config_manager.get("api_settings.api_key")
+        self.timeout = self.config_manager.get_with_default("api_settings.request_timeout")
+        
+        if not self.base_url:
+            raise ValueError("API base URL not configured")
+        if not self.api_key:
+            raise ValueError("API key not configured")
+
+    def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
+        """
+        Make a request to the API-Football API.
+
+        Args:
+            endpoint: API endpoint to call
+            params: Query parameters for the request
+
+        Returns:
+            Dict containing the API response
 
         Raises:
             AuthenticationError: If authentication fails
             RateLimitError: If rate limit is exceeded
             APIClientError: For other API errors
         """
-        url = f"{self.base_url}{endpoint}"
-        headers = self._get_headers()
+        url = f"{self.base_url}/{endpoint}"
+        headers = {
+            "X-RapidAPI-Key": self.api_key,
+            "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com"
+        }
 
         try:
-            logger.debug(f"Making API request to {url}")
+            logger.debug(f"Making API request to {endpoint}", extra={"params": params})
             response = requests.get(
                 url, headers=headers, params=params, timeout=self.timeout
             )
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # API-Football returns errors in the response body
+            if "errors" in data and data["errors"]:
+                error_msg = ", ".join(str(err) for err in data["errors"].values())
+                raise APIClientError(f"API error: {error_msg}")
+                
+            return data
+            
+        except requests.exceptions.HTTPError as e:
+            if hasattr(e, 'response') and e.response is not None:
+                if e.response.status_code == 401:
+                    raise AuthenticationError("API authentication failed") from e
+                elif e.response.status_code == 429:
+                    raise RateLimitError("API rate limit exceeded") from e
+            raise APIClientError(f"HTTP error: {e}") from e
+        except requests.exceptions.RequestException as e:
+            raise APIClientError(f"Request failed: {e}") from e
+        except json.JSONDecodeError as e:
+            raise APIClientError(f"Invalid JSON response: {e}") from e
 
-            # Handle HTTP errors
-            if response.status_code == 401:
-                raise AuthenticationError(f"Authentication failed: {response.text}")
-            elif response.status_code == 429:
-                raise RateLimitError(f"Rate limit exceeded: {response.text}")
-            elif response.status_code >= 400:
-                raise APIClientError(
-                    f"API error {response.status_code}: {response.text}"
-                )
-
-            # Parse JSON response
-            try:
-                return response.json()
-            except json.JSONDecodeError:
-                raise APIClientError(f"Invalid JSON response: {response.text}")
-
-        except requests.RequestException as e:
-            raise APIClientError(f"Request failed: {str(e)}")
-
-
-class FootballDataClient(APIClient):
-    """Client for the Football-Data.org API."""
-
-    def _get_base_url(self) -> str:
+    def get_matches_by_team(self, team_id: str, from_date: str, to_date: str) -> Dict:
         """
-        Get the base URL for Football-Data.org API.
-
-        Returns:
-            str: Base URL for the API
-        """
-        return self.config_manager.get(
-            "api.football_data.base_url", "https://api.football-data.org/v4"
-        )
-
-    def _get_timeout(self) -> int:
-        """
-        Get the timeout for API requests.
-
-        Returns:
-            int: Timeout in seconds
-        """
-        return self.config_manager.get("api.football_data.timeout", 30)
-
-    def _get_headers(self) -> Dict[str, str]:
-        """
-        Get headers for Football-Data.org API requests.
-
-        Returns:
-            Dict[str, str]: Headers for API requests
-        """
-        api_key = self.config_manager.get("api.football_data.api_key")
-        if not api_key:
-            raise AuthenticationError("API key not found in configuration")
-
-        return {"X-Auth-Token": api_key, "Accept": "application/json"}
-
-    def get_matches(
-        self,
-        team_id: Optional[str] = None,
-        date_from: Optional[str] = None,
-        date_to: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Get matches for a team within a date range.
+        Get matches for a specific team within a date range.
 
         Args:
-            team_id: Optional team ID to filter matches
-            date_from: Optional start date in ISO format (YYYY-MM-DD)
-            date_to: Optional end date in ISO format (YYYY-MM-DD)
+            team_id: Team identifier
+            from_date: Start date in format YYYY-MM-DD
+            to_date: End date in format YYYY-MM-DD
 
         Returns:
-            Dict[str, Any]: Match data
+            Dict containing match data
+
+        Raises:
+            APIClientError: If the API request fails
         """
-        params = {}
+        params = {
+            "team": team_id,
+            "from": from_date,
+            "to": to_date,
+            "timezone": "UTC"
+        }
+        return self._make_request("fixtures", params)
 
-        if team_id:
-            params["team"] = team_id
-        if date_from:
-            params["dateFrom"] = date_from
-        if date_to:
-            params["dateTo"] = date_to
-
-        return self._make_request("/matches", params)
-
-    def get_match_details(self, match_id: str) -> Dict[str, Any]:
+    def get_match_details(self, match_id: str) -> Dict:
         """
         Get detailed information for a specific match.
 
         Args:
-            match_id: Match ID
+            match_id: Match identifier
 
         Returns:
-            Dict[str, Any]: Match details
+            Dict containing match details
+
+        Raises:
+            APIClientError: If the API request fails
         """
-        return self._make_request(f"/matches/{match_id}")
+        params = {"id": match_id}
+        return self._make_request("fixtures", params)
+
+    def get_live_matches(self) -> Dict:
+        """
+        Get all currently live matches.
+
+        Returns:
+            Dict containing live match data
+
+        Raises:
+            APIClientError: If the API request fails
+        """
+        params = {"live": "all"}
+        return self._make_request("fixtures", params)
+        
+    def get_team_info(self, team_id: str) -> Dict:
+        """
+        Get information about a specific team.
+        
+        Args:
+            team_id: Team identifier
+            
+        Returns:
+            Dict containing team information
+            
+        Raises:
+            APIClientError: If the API request fails
+        """
+        params = {"id": team_id}
+        return self._make_request("teams", params)
+        
+    def get_fixtures_events(self, fixture_id: str) -> Dict:
+        """
+        Get events for a specific fixture/match.
+        
+        Args:
+            fixture_id: Fixture/match identifier
+            
+        Returns:
+            Dict containing fixture events
+            
+        Raises:
+            APIClientError: If the API request fails
+        """
+        params = {"fixture": fixture_id}
+        return self._make_request("fixtures/events", params)
+        
+    def get_fixtures_statistics(self, fixture_id: str) -> Dict:
+        """
+        Get statistics for a specific fixture/match.
+        
+        Args:
+            fixture_id: Fixture/match identifier
+            
+        Returns:
+            Dict containing fixture statistics
+            
+        Raises:
+            APIClientError: If the API request fails
+        """
+        params = {"fixture": fixture_id}
+        return self._make_request("fixtures/statistics", params)

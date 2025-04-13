@@ -28,8 +28,8 @@ class ParserError(Exception):
     pass
 
 
-class FootballDataParser:
-    """Parser for Football-Data.org API responses."""
+class APIFootballParser:
+    """Parser for API-Football.com API responses."""
 
     @staticmethod
     def parse_team(team_data: Dict[str, Any]) -> Team:
@@ -46,51 +46,10 @@ class FootballDataParser:
             ParserError: If required fields are missing
         """
         try:
-            return Team(
-                id=str(team_data["id"]),
-                name=team_data["name"],
-                short_name=team_data.get("shortName", team_data.get("tla")),
-                logo_url=team_data.get("crest"),
-                country=team_data.get("area", {}).get("name"),
-            )
-        except (KeyError, TypeError) as e:
-            logger.error(f"Error parsing team data: {e}")
-            raise ParserError(f"Error parsing team data: {e}")
-
-    @staticmethod
-    def parse_score(score_data: Dict[str, Any]) -> Score:
-        """
-        Parse score data from API response.
-
-        Args:
-            score_data: Score data from API
-
-        Returns:
-            Score: Parsed score object
-
-        Raises:
-            ParserError: If score data is invalid
-        """
-        try:
-            # Try to get full time score first
-            if "fullTime" in score_data:
-                home = score_data["fullTime"].get("home", 0)
-                away = score_data["fullTime"].get("away", 0)
-            # Fall back to regular score
-            else:
-                home = score_data.get("home", 0)
-                away = score_data.get("away", 0)
-
-            # Handle None values
-            if home is None:
-                home = 0
-            if away is None:
-                away = 0
-
-            return Score(home=home, away=away)
-        except (KeyError, TypeError) as e:
-            logger.error(f"Error parsing score data: {e}")
-            return Score(0, 0)  # Default to 0-0 on error
+            return Team.from_api_football(team_data)
+        except Exception as e:
+            logger.error(f"Error parsing team data: {e}", extra={"team_data": team_data})
+            raise ParserError(f"Failed to parse team data: {e}") from e
 
     @staticmethod
     def parse_match(match_data: Dict[str, Any]) -> Match:
@@ -107,157 +66,173 @@ class FootballDataParser:
             ParserError: If required fields are missing
         """
         try:
-            # Parse teams
-            home_team = FootballDataParser.parse_team(match_data["homeTeam"])
-            away_team = FootballDataParser.parse_team(match_data["awayTeam"])
-
-            # Parse start time
-            start_time_str = match_data["utcDate"]
-            start_time = datetime.datetime.fromisoformat(
-                start_time_str.replace("Z", "+00:00")
-            )
-
-            # Parse status
-            status_str = match_data["status"]
-            try:
-                status = MatchStatus(status_str)
-            except ValueError:
-                status = MatchStatus.UNKNOWN
-                logger.warning(f"Unknown match status: {status_str}")
-
-            # Parse score
-            score = FootballDataParser.parse_score(match_data.get("score", {}))
-
-            # Parse competition
-            competition = match_data.get("competition", {}).get("name")
-
-            # Parse matchday
-            matchday = match_data.get("matchday")
-
-            # Create match object
-            return Match(
-                id=str(match_data["id"]),
-                home_team=home_team,
-                away_team=away_team,
-                start_time=start_time,
-                status=status,
-                score=score,
-                competition=competition,
-                matchday=matchday,
-                last_updated=datetime.datetime.now(),
-            )
-        except (KeyError, TypeError, ValueError) as e:
-            logger.error(f"Error parsing match data: {e}")
-            raise ParserError(f"Error parsing match data: {e}")
+            return Match.from_api_football(match_data)
+        except Exception as e:
+            logger.error(f"Error parsing match data: {e}", extra={"match_data": match_data})
+            raise ParserError(f"Failed to parse match data: {e}") from e
 
     @staticmethod
-    def parse_matches(matches_data: Dict[str, Any]) -> List[Match]:
+    def parse_matches(response_data: Dict[str, Any]) -> List[Match]:
         """
         Parse multiple matches from API response.
 
         Args:
-            matches_data: Matches data from API
+            response_data: API response containing matches
 
         Returns:
             List[Match]: List of parsed match objects
+
+        Raises:
+            ParserError: If the response format is invalid
         """
-        matches = []
-
-        # Check if response has a 'matches' key
-        if "matches" in matches_data:
-            match_list = matches_data["matches"]
-        else:
-            match_list = matches_data
-
-        if not isinstance(match_list, list):
-            logger.error(f"Expected list of matches, got {type(match_list)}")
-            return []
-
-        for match_data in match_list:
-            try:
-                match = FootballDataParser.parse_match(match_data)
-                matches.append(match)
-            except ParserError as e:
-                logger.error(f"Skipping match due to parsing error: {e}")
-                continue
-
-        return matches
+        try:
+            matches = []
+            response = response_data.get("response", [])
+            
+            if not isinstance(response, list):
+                raise ParserError("Invalid response format: 'response' is not a list")
+                
+            for match_data in response:
+                try:
+                    match = APIFootballParser.parse_match(match_data)
+                    matches.append(match)
+                except Exception as e:
+                    logger.warning(f"Skipping invalid match data: {e}")
+                    continue
+                    
+            return matches
+        except Exception as e:
+            logger.error(f"Error parsing matches: {e}", extra={"response_data": response_data})
+            raise ParserError(f"Failed to parse matches: {e}") from e
 
     @staticmethod
-    def extract_events(
-        current_match: Match, previous_match: Optional[Match] = None
-    ) -> List[Event]:
+    def parse_event(event_data: Dict[str, Any], match_id: str) -> Event:
         """
-        Extract events by comparing current and previous match states.
+        Parse event data from API response.
 
         Args:
-            current_match: Current match state
-            previous_match: Previous match state (optional)
+            event_data: Event data from API
+            match_id: ID of the match this event belongs to
 
         Returns:
-            List[Event]: List of detected events
+            Event: Parsed event object
+
+        Raises:
+            ParserError: If required fields are missing
         """
-        events = []
+        try:
+            return Event.from_api_football(event_data, match_id)
+        except Exception as e:
+            logger.error(f"Error parsing event data: {e}", extra={"event_data": event_data})
+            raise ParserError(f"Failed to parse event data: {e}") from e
 
-        # If no previous match, check if match just started
-        if previous_match is None:
-            if current_match.is_live():
-                # Match just started
-                events.append(
-                    Event(
-                        id=str(uuid.uuid4()),
-                        match_id=current_match.id,
-                        type=EventType.MATCH_START,
-                        description=f"Match started: {current_match.home_team.name} vs {current_match.away_team.name}",
-                    )
-                )
+    @staticmethod
+    def parse_events(response_data: Dict[str, Any], match_id: str) -> List[Event]:
+        """
+        Parse multiple events from API response.
+
+        Args:
+            response_data: API response containing events
+            match_id: ID of the match these events belong to
+
+        Returns:
+            List[Event]: List of parsed event objects
+
+        Raises:
+            ParserError: If the response format is invalid
+        """
+        try:
+            events = []
+            response = response_data.get("response", [])
+            
+            if not isinstance(response, list):
+                raise ParserError("Invalid response format: 'response' is not a list")
+                
+            for event_data in response:
+                try:
+                    event = APIFootballParser.parse_event(event_data, match_id)
+                    events.append(event)
+                except Exception as e:
+                    logger.warning(f"Skipping invalid event data: {e}")
+                    continue
+                    
             return events
+        except Exception as e:
+            logger.error(f"Error parsing events: {e}", extra={"response_data": response_data})
+            raise ParserError(f"Failed to parse events: {e}") from e
 
-        # Check for status changes
-        if previous_match.status != current_match.status:
-            if current_match.is_live() and not previous_match.is_live():
-                # Match started
-                events.append(
-                    Event(
-                        id=str(uuid.uuid4()),
-                        match_id=current_match.id,
-                        type=EventType.MATCH_START,
-                        description=f"Match started: {current_match.home_team.name} vs {current_match.away_team.name}",
-                    )
-                )
-            elif current_match.is_finished() and not previous_match.is_finished():
-                # Match ended
-                events.append(
-                    Event(
-                        id=str(uuid.uuid4()),
-                        match_id=current_match.id,
-                        type=EventType.MATCH_END,
-                        description=f"Match ended: {current_match.home_team.name} {current_match.score} {current_match.away_team.name}",
-                    )
-                )
+    @staticmethod
+    def normalize_date(date_str: str) -> str:
+        """
+        Normalize date string to YYYY-MM-DD format.
 
-        # Check for score changes
-        if current_match.score.home > previous_match.score.home:
-            # Home team scored
-            events.append(
-                Event(
-                    id=str(uuid.uuid4()),
-                    match_id=current_match.id,
-                    type=EventType.GOAL,
-                    team_id=current_match.home_team.id,
-                    description=f"GOAL! {current_match.home_team.name} {current_match.score}",
-                )
-            )
-        elif current_match.score.away > previous_match.score.away:
-            # Away team scored
-            events.append(
-                Event(
-                    id=str(uuid.uuid4()),
-                    match_id=current_match.id,
-                    type=EventType.GOAL,
-                    team_id=current_match.away_team.id,
-                    description=f"GOAL! {current_match.away_team.name} {current_match.score}",
-                )
-            )
+        Args:
+            date_str: Date string in various formats
 
-        return events
+        Returns:
+            Normalized date string in YYYY-MM-DD format
+
+        Raises:
+            ValueError: If the date string cannot be parsed
+        """
+        try:
+            # Try ISO format first
+            date = datetime.datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            return date.strftime("%Y-%m-%d")
+        except ValueError:
+            # Try YYYY-MM-DD format
+            if len(date_str) == 10 and date_str[4] == '-' and date_str[7] == '-':
+                return date_str
+                
+            # For ambiguous formats like DD/MM/YYYY or MM/DD/YYYY, we'll assume DD/MM/YYYY
+            # as it's more common in international football
+            if '/' in date_str:
+                parts = date_str.split('/')
+                if len(parts) == 3:
+                    day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+                    # If day is > 12, it must be DD/MM format
+                    if day > 12:
+                        return f"{year}-{month:02d}-{day:02d}"
+                    # Otherwise, assume DD/MM format (international standard)
+                    return f"{year}-{month:02d}-{day:02d}"
+                    
+            # Try other formats as a fallback
+            for fmt in ["%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y"]:
+                try:
+                    date = datetime.datetime.strptime(date_str, fmt)
+                    return date.strftime("%Y-%m-%d")
+                except ValueError:
+                    continue
+                    
+            raise ValueError(f"Could not parse date string: {date_str}")
+
+    @staticmethod
+    def extract_team_ids(response_data: Dict[str, Any]) -> List[str]:
+        """
+        Extract team IDs from API response.
+
+        Args:
+            response_data: API response containing teams
+
+        Returns:
+            List[str]: List of team IDs
+
+        Raises:
+            ParserError: If the response format is invalid
+        """
+        try:
+            team_ids = []
+            response = response_data.get("response", [])
+            
+            if not isinstance(response, list):
+                raise ParserError("Invalid response format: 'response' is not a list")
+                
+            for team_data in response:
+                team = team_data.get("team", {})
+                if team and "id" in team:
+                    team_ids.append(str(team["id"]))
+                    
+            return team_ids
+        except Exception as e:
+            logger.error(f"Error extracting team IDs: {e}", extra={"response_data": response_data})
+            raise ParserError(f"Failed to extract team IDs: {e}") from e
