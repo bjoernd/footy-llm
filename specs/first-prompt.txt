@@ -1,5 +1,11 @@
-Ask me one question at a time so we can develop a thorough, step-by-step spec for this idea. Each question should build on my previous answers, and our end goal is to have a detailed specification I can hand off to a developer. Let’s do this iteratively and dig into every relevant detail. Remember, only one question at a time.
+Ask me one question at a time so we can develop a thorough, step-by-step spec
+for this idea. Each question should build on my previous answers, and our end
+goal is to have a detailed specification I can hand off to a developer. Let’s
+do this iteratively and dig into every relevant detail. Remember, only one
+question at a time.
 
 Here’s the idea:
 
-I would like a service that while football matches of my favourite team are running polls a football data API periodically to get match updates. I would like to get notifications on my mobile phone.
+I would like a service that while football matches of my favourite team are
+running polls a football data API periodically to get match updates. I would
+like to get notifications on my mobile phone.
