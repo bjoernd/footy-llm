@@ -16,3 +16,7 @@ hanging or orphaned code that isn't integrated into a previous step.
 Make sure and separate each prompt section. Use markdown. Each prompt should be
 tagged as text using code tags. The goal is to output prompts, but context, etc
 is important as well.
+
+Make sure that after every step we are building the project and we are running
+our existing tests. We will fix all test failures before we proceed to the next
+step.
